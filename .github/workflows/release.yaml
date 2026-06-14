@@ -9,11 +9,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8
       - run: uv sync --extra dev
       - run: uv run ruff check . && uv run pytest
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - run: helm lint charts/kubevoip && helm template kubevoip charts/kubevoip >/dev/null
       - name: Validate CRD on Kubernetes
         uses: helm/kind-action@v1

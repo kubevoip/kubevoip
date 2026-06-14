@@ -24,14 +24,14 @@ jobs:
   echo-call:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v3
       - run: docker build -t kubevoip:test .
       - run: docker build -f runtime/Dockerfile -t kubevoip-asterisk:test .
       - run: docker build -f integration/Dockerfile.sipp -t kubevoip-sipp:test .
       - uses: helm/kind-action@v1
       - run: kind load docker-image kubevoip:test kubevoip-asterisk:test kubevoip-sipp:test
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
       - run: |
           helm install kubevoip charts/kubevoip \
             --namespace kubevoip-system --create-namespace \

@@ -1,0 +1,10 @@
+[internal]
+exten => {{ spec.dialplan.echo_extension }},1,Answer()
+ same => n,Echo()
+ same => n,Hangup()
+
+{% for endpoint in endpoints %}
+exten => {{ endpoint.extension }},1,Dial(PJSIP/{{ endpoint.name }},30)
+ same => n,Hangup()
+
+{% endfor %}

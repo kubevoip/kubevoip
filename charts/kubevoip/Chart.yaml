@@ -1,0 +1,9 @@
+apiVersion: v2
+name: kubevoip
+description: A Kubernetes operator for Asterisk.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords: [voip, asterisk, sip, kubernetes, operator]
+sources:
+  - https://github.com/danohn/kubevoip

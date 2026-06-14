@@ -1,0 +1,11 @@
+FROM alpine:3.20 AS builder
+ARG SIPP_VERSION=v3.7.4
+RUN apk add --no-cache cmake g++ git linux-headers make ncurses-dev openssl-dev
+WORKDIR /src
+RUN git clone --depth 1 --branch "${SIPP_VERSION}" https://github.com/SIPp/sipp.git .
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
+
+FROM alpine:3.20
+RUN apk add --no-cache libstdc++ ncurses-libs openssl
+COPY --from=builder /src/build/sipp /usr/local/bin/sipp
+ENTRYPOINT ["sipp"]

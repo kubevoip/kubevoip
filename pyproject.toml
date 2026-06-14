@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kubevoip"
+version = "0.1.0"
+description = "A Kubernetes operator for Asterisk."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+  "jinja2>=3.1.0",
+  "kopf>=1.37.0",
+  "kubernetes>=30.0.0",
+  "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pyyaml>=6.0",
+  "pytest>=8.0.0",
+  "ruff>=0.6.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 200
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

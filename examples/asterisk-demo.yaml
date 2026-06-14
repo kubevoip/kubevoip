@@ -1,0 +1,18 @@
+apiVersion: kubevoip.io/v1alpha1
+kind: Asterisk
+metadata:
+  name: demo
+  namespace: asterisk-demo
+spec:
+  endpoints:
+    - name: alice
+      extension: "100"
+      callerId: Alice <100>
+      passwordSecretRef:
+        name: alice-sip
+        key: password
+  dialplan:
+    echoExtension: "600"
+  rtp:
+    start: 10000
+    end: 10020

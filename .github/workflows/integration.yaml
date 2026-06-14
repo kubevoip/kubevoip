@@ -1,0 +1,72 @@
+name: Integration
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "kubevoip/**"
+      - "runtime/**"
+      - "charts/**"
+      - "integration/**"
+      - "examples/**"
+      - "Dockerfile"
+  push:
+    branches: [main]
+    paths:
+      - "kubevoip/**"
+      - "runtime/**"
+      - "charts/**"
+      - "integration/**"
+      - "examples/**"
+      - "Dockerfile"
+permissions:
+  contents: read
+jobs:
+  echo-call:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker build -t kubevoip:test .
+      - run: docker build -f runtime/Dockerfile -t kubevoip-asterisk:test .
+      - run: docker build -f integration/Dockerfile.sipp -t kubevoip-sipp:test .
+      - uses: helm/kind-action@v1
+      - run: kind load docker-image kubevoip:test kubevoip-asterisk:test kubevoip-sipp:test
+      - uses: azure/setup-helm@v4
+      - run: |
+          helm install kubevoip charts/kubevoip \
+            --namespace kubevoip-system --create-namespace \
+            --set image.repository=kubevoip --set image.tag=test \
+            --set asteriskImage.repository=kubevoip-asterisk --set asteriskImage.tag=test
+      - run: kubectl apply -f examples/namespace.yaml -f examples/secret-alice-sip.yaml -f examples/asterisk-demo.yaml
+      - run: |
+          kubectl -n asterisk-demo wait --for=create statefulset/demo-asterisk --timeout=60s
+          kubectl -n asterisk-demo wait --for=condition=Ready pod -l app.kubernetes.io/name=asterisk --timeout=180s
+      - name: Complete authenticated echo call
+        run: |
+          kubectl -n asterisk-demo create configmap sipp-scenario --from-file=integration/sipp-echo.xml
+          kubectl -n asterisk-demo run sipp --restart=Never --image=kubevoip-sipp:test \
+            --overrides='{"spec":{"containers":[{"name":"sipp","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-echo.xml","-s","600","demo-asterisk","-m","1","-timeout","20s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-scenario"}}]}}'
+          kubectl -n asterisk-demo wait --for=jsonpath='{.status.phase}'=Succeeded pod/sipp --timeout=60s
+      - name: Rotate credentials and verify rollout hash
+        run: |
+          before="$(kubectl -n asterisk-demo get ast demo -o jsonpath='{.status.configHash}')"
+          kubectl -n asterisk-demo patch secret alice-sip --type=merge -p '{"data":{"password":"cm90YXRlZA=="}}'
+          for attempt in $(seq 1 18); do
+            after="$(kubectl -n asterisk-demo get ast demo -o jsonpath='{.status.configHash}')"
+            test "$before" != "$after" && exit 0
+            sleep 5
+          done
+          exit 1
+      - name: Verify owned-resource cleanup
+        run: |
+          kubectl -n asterisk-demo delete ast demo --wait=true
+          for attempt in $(seq 1 30); do
+            count="$(kubectl -n asterisk-demo get secret,configmap,service,statefulset \
+              -l app.kubernetes.io/managed-by=kubevoip --no-headers 2>/dev/null | wc -l)"
+            test "$count" -eq 0 && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Diagnostics
+        if: failure()
+        run: kubectl -n asterisk-demo get ast,pods,services -o wide && kubectl -n asterisk-demo logs statefulset/demo-asterisk

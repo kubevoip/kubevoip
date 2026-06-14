@@ -32,6 +32,8 @@ jobs:
       - run: docker build -f runtime/Dockerfile -t kubevoip-asterisk:test .
       - run: docker build -f integration/Dockerfile.sipp -t kubevoip-sipp:test .
       - uses: helm/kind-action@v1
+        with:
+          cluster_name: kind
       - run: kind load docker-image kubevoip:test kubevoip-asterisk:test kubevoip-sipp:test
       - uses: azure/setup-helm@v5
       - run: |

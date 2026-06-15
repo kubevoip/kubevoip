@@ -19,7 +19,10 @@ jobs:
       - run: helm template kubevoip charts/kubevoip >/dev/null
       - name: Validate CRD on Kubernetes
         uses: helm/kind-action@v1
-      - run: kubectl apply --dry-run=server -f config/crd/asterisk-crd.yaml
+      - run: kubectl apply --dry-run=server -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
+      - run: kubectl apply -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
+      - run: kubectl apply -f examples/namespace.yaml && kubectl create namespace kubevoip-platform
+      - run: kubectl apply --dry-run=server -f examples/platform.yaml -f integration/platform.yaml
   containers:
     name: containers (${{ matrix.platform }})
     strategy:
@@ -46,3 +49,17 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: false
           tags: kubevoip-asterisk:test
+      - uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          file: runtime/kamailio/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: false
+          tags: kubevoip-kamailio:test
+      - uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          file: runtime/rtpengine/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: false
+          tags: kubevoip-rtpengine:test

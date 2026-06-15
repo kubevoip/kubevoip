@@ -67,6 +67,7 @@ jobs:
           kubectl -n kubevoip-platform wait --for=condition=Available deployment/postgres --timeout=180s
           kubectl -n kubevoip-platform wait --for=condition=Available deployment/home-rtpengine-0 deployment/home-rtpengine-1 --timeout=240s
           kubectl -n kubevoip-platform wait --for=condition=Ready pod -l app.kubernetes.io/name=asterisk-worker --timeout=240s
+          kubectl -n kubevoip-platform wait --for=create deployment/home-sip-gateway --timeout=240s
           kubectl -n kubevoip-platform wait --for=condition=Available deployment/home-sip-gateway --timeout=240s
           for attempt in $(seq 1 30); do
             test "$(kubectl -n kubevoip-platform get sipuser daniel -o jsonpath='{.status.phase}')" = "Ready" && break

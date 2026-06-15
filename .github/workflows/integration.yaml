@@ -122,8 +122,16 @@ jobs:
           kubectl -n kubevoip-platform run sipp-after-kamailio-replacement --restart=Never --image=kubevoip-sipp:test \
             --overrides='{"spec":{"containers":[{"name":"sipp","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-platform-echo.xml","-s","600","home-sip-gateway","-m","1","-timeout","30s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
           kubectl -n kubevoip-platform wait --for=jsonpath='{.status.phase}'=Succeeded pod/sipp-after-kamailio-replacement --timeout=90s
+          old_asterisk_uid="$(kubectl -n kubevoip-platform get pod applications-asterisk-pool-0 -o jsonpath='{.metadata.uid}')"
           kubectl -n kubevoip-platform delete pod applications-asterisk-pool-0 --wait=false
-          kubectl -n kubevoip-platform wait --for=condition=Ready pod/applications-asterisk-pool-0 --timeout=180s
+          for attempt in $(seq 1 60); do
+            new_asterisk_uid="$(kubectl -n kubevoip-platform get pod applications-asterisk-pool-0 -o jsonpath='{.metadata.uid}' 2>/dev/null || true)"
+            ready="$(kubectl -n kubevoip-platform get pod applications-asterisk-pool-0 -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)"
+            test -n "$new_asterisk_uid" && test "$new_asterisk_uid" != "$old_asterisk_uid" && test "$ready" = "True" && break
+            sleep 3
+          done
+          test "$new_asterisk_uid" != "$old_asterisk_uid"
+          test "$ready" = "True"
           kubectl -n kubevoip-platform run sipp-after-asterisk-replacement --restart=Never --image=kubevoip-sipp:test \
             --overrides='{"spec":{"containers":[{"name":"sipp","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-platform-echo.xml","-s","600","home-sip-gateway","-m","1","-timeout","30s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
           kubectl -n kubevoip-platform wait --for=jsonpath='{.status.phase}'=Succeeded pod/sipp-after-asterisk-replacement --timeout=90s

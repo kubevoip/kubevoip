@@ -21,7 +21,7 @@ jobs:
       - run: scripts/check-versions.sh "${GITHUB_REF_NAME}"
       - name: Verify release paths
         run: |
-          if git grep '<owner>'; then
+          if git grep '<'"owner"'>'; then
             echo "owner placeholders remain" >&2
             exit 1
           fi

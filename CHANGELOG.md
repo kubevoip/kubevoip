@@ -2,7 +2,21 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
-## [0.2.0] - Unreleased
+## [Unreleased]
+
+### Fixed
+
+- LoadBalancer-backed SIP gateways and media relays now create their Services
+  before waiting for provider-assigned ingress addresses.
+- Pending LoadBalancer address discovery now reports a retrying
+  `WaitingForLoadBalancer` condition.
+
+### Changed
+
+- Operator installations are namespace-scoped and use a Role and RoleBinding.
+  Install one Helm release per managed telephony namespace.
+
+## [0.2.0] - 2026-06-15
 
 ### Added
 

@@ -28,6 +28,40 @@ def partition_range(start: int, end: int, replicas: int) -> list[tuple[int, int]
     return result
 
 
+def build_media_relay_services(
+    name: str,
+    namespace: str,
+    owner: dict[str, Any],
+    spec: MediaRelaySpec,
+) -> list[dict[str, Any]]:
+    services = []
+    for index, (start, end) in enumerate(partition_range(spec.media.start, spec.media.end, spec.replicas)):
+        instance = f"{name}-{index}"
+        labels = component_labels("rtpengine", instance)
+        service_name = f"{name}-rtpengine-{index}"
+        service = {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {
+                **metadata(service_name, namespace=namespace, instance=name, owner=owner),
+                "annotations": spec.network.service.annotations,
+            },
+            "spec": {
+                "type": spec.network.service.type,
+                "selector": labels,
+                "ports": [{"name": "control", "port": 2223, "protocol": "UDP"}]
+                + [
+                    {"name": f"rtp-{port}", "port": port, "protocol": "UDP"}
+                    for port in range(start, end + 1)
+                ],
+            },
+        }
+        if spec.network.service.type != "ClusterIP":
+            service["spec"]["externalTrafficPolicy"] = spec.network.service.external_traffic_policy
+        services.append(service)
+    return services
+
+
 def build_media_relay_resources(
     name: str,
     namespace: str,
@@ -36,23 +70,19 @@ def build_media_relay_resources(
     addresses: list[str],
 ) -> list[dict[str, Any]]:
     resources: list[dict[str, Any]] = []
-    for index, ((start, end), address) in enumerate(zip(partition_range(spec.media.start, spec.media.end, spec.replicas), addresses, strict=True)):
+    services = build_media_relay_services(name, namespace, owner, spec)
+    for index, ((start, end), address, service) in enumerate(
+        zip(
+            partition_range(spec.media.start, spec.media.end, spec.replicas),
+            addresses,
+            services,
+            strict=True,
+        )
+    ):
         instance = f"{name}-{index}"
         labels = component_labels("rtpengine", instance)
         common = {"namespace": namespace, "instance": name, "owner": owner}
         service_name = f"{name}-rtpengine-{index}"
-        service = {
-            "apiVersion": "v1",
-            "kind": "Service",
-            "metadata": {**metadata(service_name, **common), "annotations": spec.network.service.annotations},
-            "spec": {
-                "type": spec.network.service.type,
-                "selector": labels,
-                "ports": [{"name": "control", "port": 2223, "protocol": "UDP"}] + [{"name": f"rtp-{port}", "port": port, "protocol": "UDP"} for port in range(start, end + 1)],
-            },
-        }
-        if spec.network.service.type != "ClusterIP":
-            service["spec"]["externalTrafficPolicy"] = spec.network.service.external_traffic_policy
         command = f"""advertised="$(getent ahostsv4 "$EXTERNAL_ADDRESS" | awk 'NR == 1 {{ print $1 }}')"
 test -n "$advertised"
 exec rtpengine --foreground --log-stderr --table=-1 \
@@ -146,6 +176,31 @@ def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, An
     return [secret, service, statefulset]
 
 
+def build_gateway_service(
+    name: str,
+    namespace: str,
+    owner: dict[str, Any],
+    spec: SIPGatewaySpec,
+) -> dict[str, Any]:
+    base = f"{name}-sip-gateway"
+    service = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            **metadata(base, namespace=namespace, instance=name, owner=owner),
+            "annotations": spec.service.annotations,
+        },
+        "spec": {
+            "type": spec.service.type,
+            "selector": component_labels("kamailio", name),
+            "ports": [{"name": "sip-udp", "port": 5060, "protocol": "UDP"}],
+        },
+    }
+    if spec.service.type != "ClusterIP":
+        service["spec"]["externalTrafficPolicy"] = spec.service.external_traffic_policy
+    return service
+
+
 def build_gateway_resources(
     name: str,
     namespace: str,
@@ -162,18 +217,7 @@ def build_gateway_resources(
     config = render_kamailio_config(spec, name, external_address, relay_endpoints, asterisk_targets, sip_user_targets)
     checksum = stable_hash({"kamailio.cfg": config})
     configmap = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": metadata(f"{base}-config", **common), "data": {"kamailio.cfg": config}}
-    service = {
-        "apiVersion": "v1",
-        "kind": "Service",
-        "metadata": {**metadata(base, **common), "annotations": spec.service.annotations},
-        "spec": {
-            "type": spec.service.type,
-            "selector": labels,
-            "ports": [{"name": "sip-udp", "port": 5060, "protocol": "UDP"}],
-        },
-    }
-    if spec.service.type != "ClusterIP":
-        service["spec"]["externalTrafficPolicy"] = spec.service.external_traffic_policy
+    service = build_gateway_service(name, namespace, owner, spec)
     deployment = {
         "apiVersion": "apps/v1",
         "kind": "Deployment",

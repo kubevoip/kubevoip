@@ -20,6 +20,10 @@ class DependencyError(Exception):
     pass
 
 
+class WaitingForLoadBalancerError(DependencyError):
+    pass
+
+
 def reconcile(
     body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes
 ) -> dict[str, Any]:

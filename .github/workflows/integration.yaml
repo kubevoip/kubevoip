@@ -24,14 +24,32 @@ jobs:
       - run: kind load docker-image kubevoip:test kubevoip-asterisk:test kubevoip-asterisk-worker:test kubevoip-kamailio:test kubevoip-rtpengine:test kubevoip-sipp:test
       - uses: azure/setup-helm@v5
       - run: |
-          helm install kubevoip charts/kubevoip \
-            --namespace kubevoip-system --create-namespace \
-            --set image.repository=kubevoip --set image.tag=test \
-            --set asteriskImage.repository=kubevoip-asterisk --set asteriskImage.tag=test \
-            --set asteriskWorkerImage.repository=kubevoip-asterisk-worker --set asteriskWorkerImage.tag=test \
-            --set kamailioImage.repository=kubevoip-kamailio --set kamailioImage.tag=test \
-            --set rtpengineImage.repository=kubevoip-rtpengine --set rtpengineImage.tag=test
-      - run: kubectl apply -f examples/namespace.yaml -f examples/secret-alice-sip.yaml -f examples/asterisk-demo.yaml
+          kubectl apply -f examples/namespace.yaml
+          kubectl create namespace kubevoip-platform
+          for namespace in asterisk-demo kubevoip-platform; do
+            helm install kubevoip charts/kubevoip \
+              --namespace "${namespace}" \
+              --set image.repository=kubevoip --set image.tag=test \
+              --set asteriskImage.repository=kubevoip-asterisk --set asteriskImage.tag=test \
+              --set asteriskWorkerImage.repository=kubevoip-asterisk-worker --set asteriskWorkerImage.tag=test \
+              --set kamailioImage.repository=kubevoip-kamailio --set kamailioImage.tag=test \
+              --set rtpengineImage.repository=kubevoip-rtpengine --set rtpengineImage.tag=test
+          done
+      - name: Verify namespace-scoped Secret access
+        run: |
+          kubectl -n asterisk-demo create secret generic isolation-check --from-literal=value=private
+          kubectl auth can-i get secret/isolation-check \
+            --as=system:serviceaccount:asterisk-demo:kubevoip-kubevoip \
+            --namespace=asterisk-demo
+          test "$(kubectl auth can-i get secret/isolation-check \
+            --as=system:serviceaccount:kubevoip-platform:kubevoip-kubevoip \
+            --namespace=asterisk-demo)" = "no"
+          test "$(kubectl auth can-i list secrets \
+            --as=system:serviceaccount:asterisk-demo:kubevoip-kubevoip \
+            --all-namespaces)" = "no"
+          ! kubectl get clusterrole -o name | grep kubevoip
+          kubectl -n asterisk-demo delete secret isolation-check
+      - run: kubectl apply -f examples/secret-alice-sip.yaml -f examples/asterisk-demo.yaml
       - run: |
           kubectl -n asterisk-demo wait --for=create statefulset/demo-asterisk --timeout=60s
           kubectl -n asterisk-demo wait --for=condition=Ready pod -l app.kubernetes.io/name=asterisk --timeout=180s
@@ -76,7 +94,7 @@ jobs:
           test "$(kubectl -n kubevoip-platform get sipuser daniel -o jsonpath='{.status.phase}')" = "Ready"
           ! kubectl -n kubevoip-platform get configmaps -o yaml | grep -E 'integration-password|phone-password'
           ! kubectl -n kubevoip-platform get networkprofile,sipuser,mediarelay,asteriskpool,sipgateway -o yaml | grep -E 'integration-password|phone-password'
-          ! kubectl -n kubevoip-system logs deployment/kubevoip-kubevoip | grep -E 'integration-password|phone-password'
+          ! kubectl -n kubevoip-platform logs deployment/kubevoip-kubevoip | grep -E 'integration-password|phone-password'
       - name: Register SIP user and complete platform Echo call
         run: |
           kubectl -n kubevoip-platform create configmap sipp-platform-scenarios \
@@ -164,6 +182,8 @@ jobs:
         run: |
           kubectl -n asterisk-demo get ast,pods,services -o wide || true
           kubectl -n asterisk-demo logs statefulset/demo-asterisk || true
+          kubectl -n asterisk-demo logs deployment/kubevoip-kubevoip || true
           kubectl -n kubevoip-platform get networkprofile,sipuser,mediarelay,asteriskpool,sipgateway,pods,services -o wide || true
+          kubectl -n kubevoip-platform logs deployment/kubevoip-kubevoip || true
           kubectl -n kubevoip-platform logs deployment/home-sip-gateway || true
           kubectl -n kubevoip-platform logs deployment/home-rtpengine-0 || true

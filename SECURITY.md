@@ -18,9 +18,16 @@ mitigation. Reports will be acknowledged as soon as practical.
 
 KubeVoIP v0.2 platform APIs and external networking are experimental. UDP SIP
 has no transport encryption. Internet exposure, trunk allowlists, firewalling,
-denial-of-service protection, credential lifecycle policy, PostgreSQL
-hardening, and multi-tenant isolation require environment-specific controls.
+denial-of-service protection, credential lifecycle policy, and PostgreSQL
+hardening require environment-specific controls.
 
 KubeVoIP reads user and database credentials from Secrets and must not place
 them in status, Events, ConfigMaps, or logs. Kubernetes Secret encryption,
 external secret management, and access controls remain cluster responsibilities.
+
+Each operator release watches only its installation namespace and uses a
+namespaced Role and RoleBinding. Install a dedicated release in every namespace
+that contains KubeVoIP resources. The operator can read all Secrets within its
+own namespace because Kubernetes RBAC cannot restrict Secret reads by resource
+reference or label. Do not place unrelated application Secrets in a telephony
+namespace.

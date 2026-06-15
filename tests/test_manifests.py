@@ -23,3 +23,17 @@ def test_workflows_are_valid_yaml():
     root = Path(__file__).parents[1]
     for workflow in (root / ".github/workflows").glob("*.yaml"):
         assert yaml.safe_load(workflow.read_text())
+
+
+def test_chart_uses_namespace_scoped_rbac():
+    root = Path(__file__).parents[1]
+    rbac = (root / "charts/kubevoip/templates/rbac.yaml").read_text()
+    deployment = (root / "charts/kubevoip/templates/deployment.yaml").read_text()
+    dockerfile = (root / "Dockerfile").read_text()
+
+    assert "kind: Role\n" in rbac
+    assert "kind: RoleBinding\n" in rbac
+    assert "kind: ClusterRole" not in rbac
+    assert "kind: ClusterRoleBinding" not in rbac
+    assert "--namespace={{ .Release.Namespace }}" in deployment
+    assert "--all-namespaces" not in dockerfile

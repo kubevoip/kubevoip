@@ -1,8 +1,9 @@
 {{- if .Values.rbac.create }}
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: {{ include "kubevoip.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "kubevoip.labels" . | nindent 4 }}
 rules:
@@ -21,19 +22,17 @@ rules:
   - apiGroups: ["apps"]
     resources: ["statefulsets/status", "deployments/status"]
     verbs: ["get"]
-  - apiGroups: ["apiextensions.k8s.io"]
-    resources: ["customresourcedefinitions"]
-    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: {{ include "kubevoip.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "kubevoip.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: {{ include "kubevoip.fullname" . }}
 subjects:
   - kind: ServiceAccount

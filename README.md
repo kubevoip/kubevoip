@@ -15,12 +15,25 @@ Project home: [https://kubevoip.com](https://kubevoip.com)
 ```bash
 helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
   --version 0.2.0 \
-  --namespace kubevoip-system --create-namespace
+  --namespace telephony --create-namespace
 ```
 
 KubeVoIP v0.2 installs only `kubevoip.com/v1alpha1` CRDs. Existing v0.1
 `kubevoip.io` resources must be exported and recreated; see
 [docs/migration-v0.2.md](docs/migration-v0.2.md).
+
+Each Helm release watches and manages only its installation namespace. Its
+ServiceAccount receives a namespaced Role, including Secret access only in that
+namespace. Install a separate release for each telephony namespace:
+
+```bash
+helm install kubevoip-home oci://ghcr.io/danohn/charts/kubevoip \
+  --version 0.2.0 --namespace telephony-home --create-namespace
+helm install kubevoip-office oci://ghcr.io/danohn/charts/kubevoip \
+  --version 0.2.0 --namespace telephony-office --create-namespace
+```
+
+CRDs remain cluster-scoped Kubernetes resources shared by all releases.
 
 ## APIs
 
@@ -58,8 +71,9 @@ balancer behavior, firewall rules, DNS, router forwarding, and trunk-provider
 configuration remain the user's responsibility.
 
 `Service` and `HostNetwork` media modes are experimental. UDP SIP is the only
-supported transport. TLS, WebRTC, active-call failover, and production
-multi-tenant isolation are not included in v0.2.
+supported transport. TLS, WebRTC, and active-call failover are not included in
+v0.2. A namespace and its dedicated operator release form the supported
+isolation boundary.
 
 IP-authenticated trunks must declare `allowedSourceCidrs`. Calls arriving from
 those networks bypass subscriber authentication. Other INVITEs must
@@ -87,7 +101,7 @@ Run the controller against the current cluster:
 
 ```bash
 kubectl apply -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
-uv run kopf run kubevoip/main.py --all-namespaces --verbose
+uv run kopf run kubevoip/main.py --namespace telephony --verbose
 ```
 
 ## Release Scope

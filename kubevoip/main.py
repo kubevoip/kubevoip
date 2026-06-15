@@ -4,7 +4,7 @@ import kopf
 from kubernetes.client import ApiException
 
 from kubevoip.config import GROUP, PLURAL, VERSION
-from kubevoip.controller import DependencyError, InvalidSpecError, reconcile
+from kubevoip.controller import DependencyError, InvalidSpecError, WaitingForLoadBalancerError, reconcile
 from kubevoip.k8s import Kubernetes
 from kubevoip.platform_controller import (
     delete_sip_user_controller,
@@ -14,7 +14,7 @@ from kubevoip.platform_controller import (
     reconcile_network_profile,
     reconcile_sip_user_controller,
 )
-from kubevoip.status import error_status
+from kubevoip.status import error_status, platform_status
 
 
 def _run(reconciler, body, spec, patch, logger) -> None:
@@ -26,6 +26,20 @@ def _run(reconciler, body, spec, patch, logger) -> None:
         patch.status.update(error_status(generation, "InvalidSpec", str(error), previous))
         logger.error("Invalid resource specification: %s", error)
         raise kopf.PermanentError(str(error)) from error
+    except WaitingForLoadBalancerError as error:
+        patch.status.update(
+            platform_status(
+                generation,
+                False,
+                "WaitingForLoadBalancer",
+                str(error),
+                previous=previous,
+                component_conditions=[
+                    ("ExternalAddressResolved", False, "WaitingForLoadBalancer", str(error)),
+                ],
+            )
+        )
+        raise kopf.TemporaryError(str(error), delay=15) from error
     except DependencyError as error:
         patch.status.update(error_status(generation, "DependencyUnavailable", str(error), previous))
         raise kopf.TemporaryError(str(error), delay=30) from error

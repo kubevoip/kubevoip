@@ -6,7 +6,7 @@ from typing import Any
 from kubernetes.client import ApiException
 from pydantic import ValidationError
 
-from kubevoip.controller import DependencyError, InvalidSpecError
+from kubevoip.controller import DependencyError, InvalidSpecError, WaitingForLoadBalancerError
 from kubevoip.database import database_ready, delete_sip_user, reconcile_sip_user
 from kubevoip.k8s import Kubernetes
 from kubevoip.models import (
@@ -19,7 +19,9 @@ from kubevoip.models import (
 from kubevoip.platform_resources import (
     build_asterisk_pool_resources,
     build_gateway_resources,
+    build_gateway_service,
     build_media_relay_resources,
+    build_media_relay_services,
     partition_range,
 )
 from kubevoip.status import platform_status
@@ -98,6 +100,8 @@ def reconcile_media_relay(body: dict[str, Any], raw_spec: dict[str, Any], kubern
     spec = _model(MediaRelaySpec, raw_spec)
     namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
     profile = _profile(namespace, spec.network_profile_ref.name, kubernetes)
+    for service in build_media_relay_services(name, namespace, body, spec):
+        kubernetes.apply(service)
     overrides = {item.replica: item.external_address for item in spec.network.replica_overrides}
     addresses: list[str] = []
     relay_status: list[dict[str, Any]] = []
@@ -113,6 +117,10 @@ def reconcile_media_relay(body: dict[str, Any], raw_spec: dict[str, Any], kubern
             address = f"{service_name}.{namespace}.svc.cluster.local"
             source = "ClusterIP"
         if not address:
+            if spec.network.service.type == "LoadBalancer":
+                raise WaitingForLoadBalancerError(
+                    f"waiting for LoadBalancer address for RTPengine replica {index}"
+                )
             raise DependencyError(f"external address for RTPengine replica {index} is unavailable")
         addresses.append(address)
         relay_status.append(
@@ -169,6 +177,7 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
     namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
     profile = _profile(namespace, spec.network_profile_ref.name, kubernetes)
     service_name = f"{name}-sip-gateway"
+    kubernetes.apply(build_gateway_service(name, namespace, body, spec))
     address, address_source = resolve_external_address(
         component_override=spec.external_address,
         profile_address=_profile_address(profile),
@@ -178,6 +187,8 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
         address = f"{service_name}.{namespace}.svc.cluster.local"
         address_source = "ClusterIP"
     if not address:
+        if spec.service.type == "LoadBalancer":
+            raise WaitingForLoadBalancerError("waiting for LoadBalancer address for SIP gateway")
         raise DependencyError("SIP gateway external address is unavailable")
     try:
         media = kubernetes.read_custom(namespace, "mediarelays", spec.media_relay_ref.name)

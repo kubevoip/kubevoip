@@ -12,6 +12,11 @@ For cluster-local `ClusterIP` components, KubeVoIP uses the managed Service DNS
 name. A hostname used by RTPengine is resolved inside its Pod before startup
 because SDP requires an IP address.
 
+For LoadBalancer components without an explicit address, KubeVoIP first creates
+the managed Service and reports `WaitingForLoadBalancer` while its ingress is
+pending. Once MetalLB or the cloud provider assigns an address, reconciliation
+continues and starts or rolls the component with that advertised address.
+
 Kamailio receives SIP, writes registrations to PostgreSQL, selects a route, and
 asks an RTPengine replica to rewrite SDP. Direct trunk-to-phone media flows
 through RTPengine without Asterisk. Calls to an `AsteriskPool` application flow

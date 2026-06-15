@@ -41,3 +41,42 @@ def test_chart_uses_namespace_scoped_rbac():
     assert 'resources: ["customresourcedefinitions"]' in rbac
     assert "--namespace={{ .Release.Namespace }}" in deployment
     assert "--all-namespaces" not in dockerfile
+
+
+def test_discovery_rbac_names_include_release_namespace():
+    import subprocess
+
+    root = Path(__file__).parents[1]
+
+    first = subprocess.run(
+        ["helm", "template", "kubevoip", "charts/kubevoip", "--namespace", "asterisk-demo"],
+        cwd=root,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    second = subprocess.run(
+        ["helm", "template", "kubevoip", "charts/kubevoip", "--namespace", "kubevoip-platform"],
+        cwd=root,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    first_docs = list(yaml.safe_load_all(first.stdout))
+    second_docs = list(yaml.safe_load_all(second.stdout))
+
+    first_cluster_roles = {
+        item["metadata"]["name"]
+        for item in first_docs
+        if item and item.get("kind") in {"ClusterRole", "ClusterRoleBinding"}
+    }
+    second_cluster_roles = {
+        item["metadata"]["name"]
+        for item in second_docs
+        if item and item.get("kind") in {"ClusterRole", "ClusterRoleBinding"}
+    }
+
+    assert first_cluster_roles == {"kubevoip-kubevoip-asterisk-demo-discovery"}
+    assert second_cluster_roles == {"kubevoip-kubevoip-kubevoip-platform-discovery"}
+    assert first_cluster_roles.isdisjoint(second_cluster_roles)

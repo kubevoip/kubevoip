@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.2.2] - 2026-06-15
+
+### Fixed
+
+- Namespace-scoped operator installs now include read-only cluster discovery
+  permissions for Namespaces and CRDs, avoiding noisy Kopf startup retries
+  without granting cross-namespace Secret access.
+
 ## [0.2.1] - 2026-06-15
 
 ### Fixed

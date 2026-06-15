@@ -33,7 +33,11 @@ def test_chart_uses_namespace_scoped_rbac():
 
     assert "kind: Role\n" in rbac
     assert "kind: RoleBinding\n" in rbac
-    assert "kind: ClusterRole" not in rbac
-    assert "kind: ClusterRoleBinding" not in rbac
+    assert "kind: ClusterRole\n" in rbac
+    assert "kind: ClusterRoleBinding\n" in rbac
+    assert 'resources: ["secrets"]' not in rbac
+    assert 'resources: ["configmaps", "secrets", "services", "pods"]' in rbac
+    assert 'resources: ["namespaces"]' in rbac
+    assert 'resources: ["customresourcedefinitions"]' in rbac
     assert "--namespace={{ .Release.Namespace }}" in deployment
     assert "--all-namespaces" not in dockerfile

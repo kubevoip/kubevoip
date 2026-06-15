@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kubevoip"
-version = "0.1.0"
-description = "A Kubernetes operator for Asterisk."
+version = "0.2.0"
+description = "A Kubernetes operator for scalable SIP platforms."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -14,6 +14,7 @@ dependencies = [
   "kopf>=1.37.0",
   "kubernetes>=30.0.0",
   "pydantic>=2.0.0",
+  "psycopg[binary]>=3.2.0",
 ]
 
 [project.optional-dependencies]

@@ -4,7 +4,7 @@ from kubevoip.models import AsteriskSpec
 from kubevoip.resources import build_resources
 
 OWNER = {
-    "apiVersion": "kubevoip.io/v1alpha1",
+    "apiVersion": "kubevoip.com/v1alpha1",
     "kind": "Asterisk",
     "metadata": {"name": "demo", "namespace": "test", "uid": "uid"},
 }
@@ -21,7 +21,7 @@ def test_resources_share_access_service_and_mount_secret():
     access = resources[3]
     assert [port["port"] for port in access["spec"]["ports"]] == [5060, 10000, 10001, 10002]
     statefulset = resources[4]
-    assert statefulset["spec"]["template"]["metadata"]["annotations"]["kubevoip.io/config-hash"] == "hash"
+    assert statefulset["spec"]["template"]["metadata"]["annotations"]["kubevoip.com/config-hash"] == "hash"
 
 
 def test_all_resources_have_controller_owner_reference():

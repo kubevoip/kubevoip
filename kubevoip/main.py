@@ -6,17 +6,25 @@ from kubernetes.client import ApiException
 from kubevoip.config import GROUP, PLURAL, VERSION
 from kubevoip.controller import DependencyError, InvalidSpecError, reconcile
 from kubevoip.k8s import Kubernetes
+from kubevoip.platform_controller import (
+    delete_sip_user_controller,
+    reconcile_asterisk_pool,
+    reconcile_gateway,
+    reconcile_media_relay,
+    reconcile_network_profile,
+    reconcile_sip_user_controller,
+)
 from kubevoip.status import error_status
 
 
-def _run(body, spec, patch, logger) -> None:
+def _run(reconciler, body, spec, patch, logger) -> None:
     generation = body["metadata"].get("generation", 1)
     previous = body.get("status", {}).get("conditions")
     try:
-        patch.status.update(reconcile(body, spec, Kubernetes()))
+        patch.status.update(reconciler(body, spec, Kubernetes()))
     except InvalidSpecError as error:
         patch.status.update(error_status(generation, "InvalidSpec", str(error), previous))
-        logger.error("Invalid Asterisk specification: %s", error)
+        logger.error("Invalid resource specification: %s", error)
         raise kopf.PermanentError(str(error)) from error
     except DependencyError as error:
         patch.status.update(error_status(generation, "DependencyUnavailable", str(error), previous))
@@ -30,9 +38,31 @@ def _run(body, spec, patch, logger) -> None:
 @kopf.on.update(GROUP, VERSION, PLURAL)
 @kopf.on.resume(GROUP, VERSION, PLURAL)
 def reconcile_asterisk(body, spec, patch, logger, **_):
-    _run(body, spec, patch, logger)
+    _run(reconcile, body, spec, patch, logger)
 
 
 @kopf.timer(GROUP, VERSION, PLURAL, interval=30.0, sharp=True)
 def refresh_asterisk(body, spec, patch, logger, **_):
-    _run(body, spec, patch, logger)
+    _run(reconcile, body, spec, patch, logger)
+
+
+def _handlers(plural, reconciler):
+    def handler(body, spec, patch, logger, **_):
+        _run(reconciler, body, spec, patch, logger)
+
+    kopf.on.create(GROUP, VERSION, plural, id=f"{plural}-create")(handler)
+    kopf.on.update(GROUP, VERSION, plural, id=f"{plural}-update")(handler)
+    kopf.on.resume(GROUP, VERSION, plural, id=f"{plural}-resume")(handler)
+    kopf.timer(GROUP, VERSION, plural, id=f"{plural}-refresh", interval=30.0, sharp=True)(handler)
+
+
+_handlers("networkprofiles", reconcile_network_profile)
+_handlers("mediarelays", reconcile_media_relay)
+_handlers("asteriskpools", reconcile_asterisk_pool)
+_handlers("sipgateways", reconcile_gateway)
+_handlers("sipusers", reconcile_sip_user_controller)
+
+
+@kopf.on.delete(GROUP, VERSION, "sipusers")
+def delete_sip_user(body, spec, **_):
+    delete_sip_user_controller(body, spec, Kubernetes())

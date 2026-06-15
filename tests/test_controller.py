@@ -3,7 +3,7 @@ import base64
 from kubevoip.controller import reconcile
 
 BODY = {
-    "apiVersion": "kubevoip.io/v1alpha1",
+    "apiVersion": "kubevoip.com/v1alpha1",
     "kind": "Asterisk",
     "metadata": {"name": "demo", "namespace": "test", "uid": "uid", "generation": 2},
 }

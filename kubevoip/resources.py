@@ -108,7 +108,7 @@ def build_resources(
             "template": {
                 "metadata": {
                     "labels": pod_labels,
-                    "annotations": {"kubevoip.io/config-hash": checksum},
+                    "annotations": {"kubevoip.com/config-hash": checksum},
                 },
                 "spec": {
                     "securityContext": {

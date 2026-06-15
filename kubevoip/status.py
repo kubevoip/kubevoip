@@ -14,12 +14,7 @@ def condition(
 ) -> dict[str, Any]:
     transition_time = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     for old in previous or []:
-        if (
-            old.get("type") == condition_type
-            and old.get("status") == status
-            and old.get("reason") == reason
-            and old.get("message") == message
-        ):
+        if old.get("type") == condition_type and old.get("status") == status and old.get("reason") == reason and old.get("message") == message:
             transition_time = old.get("lastTransitionTime", transition_time)
             break
     return {
@@ -63,4 +58,26 @@ def error_status(
         "phase": "Error",
         "ready": False,
         "conditions": [condition("Ready", "False", reason, message, generation, previous)],
+    }
+
+
+def platform_status(
+    generation: int,
+    ready: bool,
+    reason: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+    previous: list[dict[str, Any]] | None = None,
+    component_conditions: list[tuple[str, bool, str, str]] | None = None,
+) -> dict[str, Any]:
+    conditions = [condition("Ready", "True" if ready else "False", reason, message, generation, previous)]
+    conditions.extend(
+        condition(condition_type, "True" if status else "False", item_reason, item_message, generation, previous) for condition_type, status, item_reason, item_message in component_conditions or []
+    )
+    return {
+        "observedGeneration": generation,
+        "phase": "Ready" if ready else "Reconciling",
+        "ready": ready,
+        **(details or {}),
+        "conditions": conditions,
     }

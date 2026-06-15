@@ -27,6 +27,12 @@ spec:
           env:
             - name: KUBEVOIP_ASTERISK_IMAGE
               value: "{{ .Values.asteriskImage.repository }}:{{ .Values.asteriskImage.tag }}"
+            - name: KUBEVOIP_ASTERISK_WORKER_IMAGE
+              value: "{{ .Values.asteriskWorkerImage.repository }}:{{ .Values.asteriskWorkerImage.tag }}"
+            - name: KUBEVOIP_KAMAILIO_IMAGE
+              value: "{{ .Values.kamailioImage.repository }}:{{ .Values.kamailioImage.tag }}"
+            - name: KUBEVOIP_RTPENGINE_IMAGE
+              value: "{{ .Values.rtpengineImage.repository }}:{{ .Values.rtpengineImage.tag }}"
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       nodeSelector:

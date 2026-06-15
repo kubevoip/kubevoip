@@ -6,8 +6,8 @@ metadata:
   labels:
     {{- include "kubevoip.labels" . | nindent 4 }}
 rules:
-  - apiGroups: ["kubevoip.io"]
-    resources: ["asterisks", "asterisks/status", "asterisks/finalizers"]
+  - apiGroups: ["kubevoip.com"]
+    resources: ["asterisks", "asterisks/status", "asterisks/finalizers", "networkprofiles", "networkprofiles/status", "networkprofiles/finalizers", "sipusers", "sipusers/status", "sipusers/finalizers", "mediarelays", "mediarelays/status", "mediarelays/finalizers", "asteriskpools", "asteriskpools/status", "asteriskpools/finalizers", "sipgateways", "sipgateways/status", "sipgateways/finalizers"]
     verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
     resources: ["configmaps", "secrets", "services", "pods"]
@@ -16,10 +16,10 @@ rules:
     resources: ["events"]
     verbs: ["create", "patch"]
   - apiGroups: ["apps"]
-    resources: ["statefulsets"]
+    resources: ["statefulsets", "deployments"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
   - apiGroups: ["apps"]
-    resources: ["statefulsets/status"]
+    resources: ["statefulsets/status", "deployments/status"]
     verbs: ["get"]
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]

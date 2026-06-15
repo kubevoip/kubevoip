@@ -2,6 +2,23 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.2.0] - Unreleased
+
+### Added
+
+- Experimental `NetworkProfile`, `SIPUser`, `MediaRelay`, `AsteriskPool`, and
+  `SIPGateway` APIs.
+- Kamailio, userspace RTPengine, PostgreSQL subscriber reconciliation, and
+  private Asterisk application workers.
+- Explicit, Service-discovered, component-level, and per-relay external
+  address handling.
+- Safe v0.1 API migration exporter and versioned Kamailio database migration.
+
+### Changed
+
+- API group moved from `kubevoip.io` to `kubevoip.com` as an intentional
+  breaking change.
+
 ## [0.1.0] - 2026-06-14
 
 ### Added

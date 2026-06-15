@@ -3,109 +3,101 @@
 [![Test](https://github.com/danohn/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/test.yaml)
 [![Integration](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml)
 
-KubeVoIP is a Kubernetes operator that turns an `Asterisk` custom resource into
-a single-instance Asterisk PBX. It uses Python, Kopf, generated static
-configuration, and ordinary Kubernetes resources.
+KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.2 introduces
+experimental Kamailio gateways, RTPengine media relays, PostgreSQL-backed SIP
+users, and interchangeable Asterisk application workers. The original
+single-instance `Asterisk` API remains available under the new API group.
 
-KubeVoIP v0.1 guarantees cluster-local SIP over UDP. External SIP and RTP
-through `LoadBalancer` Services are experimental because NAT, SDP rewriting,
-UDP support, and listener limits differ between environments.
+Project home: [https://kubevoip.com](https://kubevoip.com)
 
 ## Install
 
 ```bash
 helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.1.0 \
+  --version 0.2.0 \
   --namespace kubevoip-system --create-namespace
+```
+
+KubeVoIP v0.2 installs only `kubevoip.com/v1alpha1` CRDs. Existing v0.1
+`kubevoip.io` resources must be exported and recreated; see
+[docs/migration-v0.2.md](docs/migration-v0.2.md).
+
+## APIs
+
+- `Asterisk`: the v0.1 single-PBX model, moved unchanged to `kubevoip.com`.
+- `NetworkProfile`: shared external addressing and local-network policy.
+- `SIPUser`: a PostgreSQL-backed identity registered through Kamailio.
+- `MediaRelay`: stable, horizontally scalable RTPengine replicas.
+- `AsteriskPool`: private application workers, currently providing Echo.
+- `SIPGateway`: Kamailio registration, media-relay, trunk, and route policy.
+
+Platform resources are experimental in v0.2. References are namespaced and
+must point to resources in the same namespace.
+
+```bash
 kubectl apply -f examples/namespace.yaml
-kubectl apply -f examples/secret-alice-sip.yaml
-kubectl apply -f examples/asterisk-demo.yaml
-kubectl -n asterisk-demo get ast,pods,services
+kubectl apply -f examples/platform.yaml
+kubectl -n asterisk-demo get networkprofile,mediarelay,asteriskpool
 ```
 
-The operator creates a generated Secret for `pjsip.conf`, a ConfigMap for
-`extensions.conf` and `rtp.conf`, a headless Service, one access Service, and a
-single-replica StatefulSet. Changing a referenced password Secret is detected
-within 30 seconds and rolls the Pod.
+A PostgreSQL database and a standard connection Secret are required before
+creating `SIPGateway` and `SIPUser` resources. KubeVoIP does not install or
+require CNPG. The Secret keys are `host`, `port`, `dbname`, `user`, and
+`password`.
 
-## Custom Resource
+## External Networking
 
-```yaml
-apiVersion: kubevoip.io/v1alpha1
-kind: Asterisk
-metadata:
-  name: demo
-  namespace: asterisk-demo
-spec:
-  service:
-    type: ClusterIP
-  endpoints:
-    - name: alice
-      extension: "100"
-      passwordSecretRef:
-        name: alice-sip
-        key: password
-  dialplan:
-    echoExtension: "600"
-```
+Set `NetworkProfile.spec.externalAddress.value` to an IP address or hostname,
+or set `source: Service` to discover addresses from managed LoadBalancer
+Services. Component overrides and RTPengine replica overrides take precedence.
 
-Endpoint names and numeric extensions must be unique. The echo extension cannot
-overlap an endpoint extension. RTP ranges are limited to 200 ports because a
-Kubernetes Service requires every UDP port to be listed.
+KubeVoIP rewrites SIP advertised addresses and RTPengine SDP addresses. Public
+forwarding must preserve UDP port numbers: SIP `5060` and each assigned
+RTPengine range must use identical public and private ports. Provider load
+balancer behavior, firewall rules, DNS, router forwarding, and trunk-provider
+configuration remain the user's responsibility.
+
+`Service` and `HostNetwork` media modes are experimental. UDP SIP is the only
+supported transport. TLS, WebRTC, active-call failover, and production
+multi-tenant isolation are not included in v0.2.
+
+IP-authenticated trunks must declare `allowedSourceCidrs`. Calls arriving from
+those networks bypass subscriber authentication. Other INVITEs must
+authenticate as a `SIPUser`. Routes can target a `sipUserRef`,
+`asteriskPoolRef`, or declared `trunkRef`.
+
+See [docs/networking.md](docs/networking.md) for precedence and packet-flow
+details.
 
 ## Development
 
-Requirements: Python 3.12+, `uv`, Helm 3, and access to Kubernetes.
+Requirements: Python 3.12+, `uv`, Helm 3, Docker, and Kubernetes.
 
 ```bash
 uv sync --extra dev
-uv run pytest
 uv run ruff check .
+uv run pytest
 helm lint charts/kubevoip
 helm template kubevoip charts/kubevoip
+kubectl apply --dry-run=server -f config/crd/asterisk-crd.yaml
+kubectl apply --dry-run=server -f config/crd/platform-crds.yaml
 ```
 
 Run the controller against the current cluster:
 
 ```bash
-kubectl apply -f config/crd/asterisk-crd.yaml
+kubectl apply -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
 uv run kopf run kubevoip/main.py --all-namespaces --verbose
 ```
 
-## Runtime And Networking
+## Release Scope
 
-`runtime/Dockerfile` builds a pinned Asterisk 22 LTS runtime from source. The
-default image is non-root and intentionally includes only modules needed for
-PJSIP registration, endpoint calls, RTP, and Echo.
+Releases publish multi-architecture operator, Asterisk, Asterisk-worker,
+Kamailio, and RTPengine images plus the OCI Helm chart. Asterisk 22 LTS,
+Kamailio 5.6.3, and RTPengine 10.5.3.5 are pinned for v0.2.
 
-The release publishes `linux/amd64` and `linux/arm64` operator and Asterisk
-images. KubeVoIP is tested on a current Kubernetes cluster; older Kubernetes
-releases may work but are not part of the v0.1 compatibility guarantee.
-
-The access Service places SIP and RTP on one Kubernetes address. `ClusterIP` is
-the supported v0.1 path. A `LoadBalancer` may work on a particular environment,
-but portable external calling also requires provider-specific UDP support and
-Asterisk NAT/SDP configuration that v0.1 does not manage.
-
-## Release
-
-Tags matching `vX.Y.Z` run tests, build `linux/amd64` and `linux/arm64`
-operator/runtime images, publish the Helm chart to GHCR, and create a GitHub
-release. Repository, chart, and Python versions must match the tag.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
-[CHANGELOG.md](CHANGELOG.md) for project policies and release history.
-
-## Cleanup
-
-```bash
-kubectl delete -f examples/asterisk-demo.yaml
-kubectl delete -f examples/secret-alice-sip.yaml
-kubectl delete -f examples/namespace.yaml
-helm uninstall kubevoip --namespace kubevoip-system
-```
-
-Helm intentionally leaves the CRD installed on uninstall.
+Helm intentionally leaves CRDs installed on uninstall. Remove the old
+`asterisks.kubevoip.io` CRD only after migration has been verified.
 
 ## License
 

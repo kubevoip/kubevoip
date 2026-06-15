@@ -23,8 +23,8 @@ helm lint charts/kubevoip
 helm template kubevoip charts/kubevoip >/dev/null
 ```
 
-Keep changes focused, add tests for behavioral changes, and preserve the narrow
-`v1alpha1` API unless an issue explicitly agrees on an API change.
+Keep changes focused, add tests for behavioral changes, and treat every
+`v1alpha1` API change as a compatibility decision that requires documentation.
 
 ## Pull Requests
 

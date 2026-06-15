@@ -16,7 +16,11 @@ mitigation. Reports will be acknowledged as soon as practical.
 
 ## Security Boundaries
 
-KubeVoIP v0.1 is not a production-grade PBX platform. Cluster-local UDP SIP is
-the supported networking path. External exposure, NAT traversal, denial-of-
-service protection, credential lifecycle policy, and multi-tenant isolation
-require environment-specific controls outside the project.
+KubeVoIP v0.2 platform APIs and external networking are experimental. UDP SIP
+has no transport encryption. Internet exposure, trunk allowlists, firewalling,
+denial-of-service protection, credential lifecycle policy, PostgreSQL
+hardening, and multi-tenant isolation require environment-specific controls.
+
+KubeVoIP reads user and database credentials from Secrets and must not place
+them in status, Events, ConfigMaps, or logs. Kubernetes Secret encryption,
+external secret management, and access controls remain cluster responsibilities.

@@ -21,21 +21,28 @@ jobs:
         uses: helm/kind-action@v1
       - run: kubectl apply --dry-run=server -f config/crd/asterisk-crd.yaml
   containers:
-    runs-on: ubuntu-latest
+    name: containers (${{ matrix.platform }})
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-      - uses: docker/setup-qemu-action@v4.1.0
       - uses: docker/setup-buildx-action@v4.1.0
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: false
           tags: kubevoip:test
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
           file: runtime/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: false
           tags: kubevoip-asterisk:test

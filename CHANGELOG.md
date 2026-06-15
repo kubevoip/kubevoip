@@ -2,7 +2,7 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
-## [Unreleased]
+## [0.2.1] - 2026-06-15
 
 ### Fixed
 

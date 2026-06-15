@@ -2,8 +2,8 @@ apiVersion: v2
 name: kubevoip
 description: A Kubernetes operator for scalable SIP platforms.
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.2.1
+appVersion: "0.2.1"
 home: https://kubevoip.com
 keywords: [voip, asterisk, sip, kubernetes, operator]
 sources:

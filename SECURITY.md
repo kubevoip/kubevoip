@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-KubeVoIP is an early project. Only the latest published release
+KubeVoIP is an early-stage project. Only the latest published release
 receives security fixes.
 
 ## Reporting A Vulnerability

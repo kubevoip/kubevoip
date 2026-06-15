@@ -1,6 +1,6 @@
 # Contributing
 
-KubeVoIP is a project. Bug reports, documentation improvements,
+KubeVoIP welcomes bug reports, documentation improvements,
 tests, and focused feature proposals are welcome.
 
 ## Development

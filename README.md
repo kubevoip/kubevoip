@@ -3,9 +3,9 @@
 [![Test](https://github.com/danohn/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/test.yaml)
 [![Integration](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml)
 
-KubeVoIP is a Kubernetes operator that turns an `Asterisk`
-custom resource into a single-instance Asterisk PBX. It uses Python, Kopf,
-generated static configuration, and ordinary Kubernetes resources.
+KubeVoIP is a Kubernetes operator that turns an `Asterisk` custom resource into
+a single-instance Asterisk PBX. It uses Python, Kopf, generated static
+configuration, and ordinary Kubernetes resources.
 
 KubeVoIP v0.1 guarantees cluster-local SIP over UDP. External SIP and RTP
 through `LoadBalancer` Services are experimental because NAT, SDP rewriting,

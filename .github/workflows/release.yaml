@@ -6,7 +6,7 @@ permissions:
   contents: write
   packages: write
 jobs:
-  publish:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -26,7 +26,36 @@ jobs:
             exit 1
           fi
           test "${GITHUB_REPOSITORY_OWNER}" = "danohn"
-      - uses: docker/setup-qemu-action@v4.1.0
+
+  build-images:
+    name: build ${{ matrix.image }} (${{ matrix.platform }})
+    needs: validate
+    strategy:
+      matrix:
+        include:
+          - image: kubevoip
+            file: Dockerfile
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - image: kubevoip
+            file: Dockerfile
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+          - image: kubevoip-asterisk
+            file: runtime/Dockerfile
+            runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - image: kubevoip-asterisk
+            file: runtime/Dockerfile
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4.1.0
       - uses: docker/login-action@v4.2.0
         with:
@@ -36,16 +65,31 @@ jobs:
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          file: ${{ matrix.file }}
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ghcr.io/danohn/kubevoip:${{ github.ref_name }}
-      - uses: docker/build-push-action@v7.2.0
+          tags: ghcr.io/danohn/${{ matrix.image }}:${{ github.ref_name }}-${{ matrix.arch }}
+
+  publish:
+    needs: [validate, build-images]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4.1.0
+      - uses: docker/login-action@v4.2.0
         with:
-          context: .
-          file: runtime/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ghcr.io/danohn/kubevoip-asterisk:${{ github.ref_name }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create multi-architecture image manifests
+        run: |
+          for image in kubevoip kubevoip-asterisk; do
+            docker buildx imagetools create \
+              --tag "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}" \
+              "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}-amd64" \
+              "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}-arm64"
+          done
+      - uses: azure/setup-helm@v5
       - run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
           helm package charts/kubevoip

@@ -2,24 +2,8 @@ name: Integration
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - "kubevoip/**"
-      - "runtime/**"
-      - "charts/**"
-      - "integration/**"
-      - "examples/**"
-      - "Dockerfile"
-      - ".github/workflows/integration.yaml"
   push:
     branches: [main]
-    paths:
-      - "kubevoip/**"
-      - "runtime/**"
-      - "charts/**"
-      - "integration/**"
-      - "examples/**"
-      - "Dockerfile"
-      - ".github/workflows/integration.yaml"
 permissions:
   contents: read
 jobs:

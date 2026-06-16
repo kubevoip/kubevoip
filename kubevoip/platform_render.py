@@ -50,6 +50,7 @@ def render_kamailio_config(
     spec: SIPGatewaySpec,
     gateway_name: str,
     external_address: str,
+    internal_address: str,
     relay_endpoints: list[str],
     asterisk_targets: dict[str, str],
     sip_user_targets: dict[str, str],
@@ -72,11 +73,23 @@ def render_kamailio_config(
     trusted_sources = [f"src_ip == {network}" for trunk in spec.trunks for network in trunk.allowed_source_cidrs]
     trust_line = f"if ({' || '.join(trusted_sources)}) {{ setflag(1); }}" if trusted_sources else ""
     relay_sockets = " ".join(relay_endpoints)
+    external_record_route = external_address.replace('"', '\\"')
+    internal_record_route = internal_address.replace('"', '\\"')
+    if internal_record_route == external_record_route:
+        record_route_line = "record_route();"
+    else:
+        record_route_line = (
+            f'if (isflagset(1)) {{ record_route_preset("{internal_record_route}:5060;r2=on", "{external_record_route}:5060;r2=on"); }} '
+            f'else {{ record_route_preset("{external_record_route}:5060;r2=on", "{internal_record_route}:5060;r2=on"); }}'
+        )
     return f"""#!KAMAILIO
 #!define ADVERTISED_ADDR "{external_address}"
+#!define INTERNAL_ADDR "{internal_address}"
 #!define AUTH_REALM "{gateway_name}"
 #!define RTPENGINE_SOCKETS "{relay_sockets}"
 auto_aliases=no
+alias=ADVERTISED_ADDR:5060
+alias=INTERNAL_ADDR:5060
 listen=udp:0.0.0.0:5060 advertise ADVERTISED_ADDR:5060
 loadmodule "db_postgres.so"
 loadmodule "tm.so"
@@ -118,7 +131,7 @@ request_route {{
     consume_credentials();
   }}
   if (has_body("application/sdp")) {{ rtpengine_offer("replace-origin replace-session-connection"); }}
-  if (is_method("INVITE")) {{ record_route(); }}
+  if (is_method("INVITE")) {{ {record_route_line} }}
   {" ".join(routes)}
   if (!lookup("location")) {{ send_reply("404", "No route"); exit; }}
   route(RELAY);

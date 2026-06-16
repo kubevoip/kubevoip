@@ -99,6 +99,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ghcr.io/danohn/${{ matrix.image }}:${{ github.ref_name }}-${{ matrix.arch }}
+          cache-from: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }},mode=max
 
   publish:
     needs: [validate, build-images]

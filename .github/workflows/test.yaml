@@ -3,6 +3,9 @@ on:
   pull_request:
   push:
     branches: [main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -40,8 +43,10 @@ jobs:
         include:
           - runner: ubuntu-24.04
             platform: linux/amd64
+            arch: amd64
           - runner: ubuntu-24.04-arm
             platform: linux/arm64
+            arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -52,6 +57,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: false
           tags: kubevoip:test
+          cache-from: type=gha,scope=kubevoip-${{ matrix.arch }}
+          cache-to: type=gha,scope=kubevoip-${{ matrix.arch }},mode=max
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
@@ -59,6 +66,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: false
           tags: kubevoip-asterisk:test
+          cache-from: type=gha,scope=asterisk-${{ matrix.arch }}
+          cache-to: type=gha,scope=asterisk-${{ matrix.arch }},mode=max
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
@@ -66,6 +75,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: false
           tags: kubevoip-kamailio:test
+          cache-from: type=gha,scope=kamailio-${{ matrix.arch }}
+          cache-to: type=gha,scope=kamailio-${{ matrix.arch }},mode=max
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
@@ -73,3 +84,5 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: false
           tags: kubevoip-rtpengine:test
+          cache-from: type=gha,scope=rtpengine-${{ matrix.arch }}
+          cache-to: type=gha,scope=rtpengine-${{ matrix.arch }},mode=max

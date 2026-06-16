@@ -178,10 +178,11 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
     profile = _profile(namespace, spec.network_profile_ref.name, kubernetes)
     service_name = f"{name}-sip-gateway"
     kubernetes.apply(build_gateway_service(name, namespace, body, spec))
+    service_address = kubernetes.service_ingress(namespace, service_name)
     address, address_source = resolve_external_address(
         component_override=spec.external_address,
         profile_address=_profile_address(profile),
-        service_address=kubernetes.service_ingress(namespace, service_name),
+        service_address=service_address,
     )
     if not address and spec.service.type == "ClusterIP":
         address = f"{service_name}.{namespace}.svc.cluster.local"
@@ -190,6 +191,7 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
         if spec.service.type == "LoadBalancer":
             raise WaitingForLoadBalancerError("waiting for LoadBalancer address for SIP gateway")
         raise DependencyError("SIP gateway external address is unavailable")
+    internal_address = spec.internal_address or service_address or f"{service_name}.{namespace}.svc.cluster.local"
     try:
         media = kubernetes.read_custom(namespace, "mediarelays", spec.media_relay_ref.name)
     except ApiException as error:
@@ -213,7 +215,7 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
         database_ready(database)
     except Exception as error:
         raise DependencyError("gateway database is unavailable") from error
-    for resource in build_gateway_resources(name, namespace, body, spec, address, relay_endpoints, asterisk_targets, sip_user_targets):
+    for resource in build_gateway_resources(name, namespace, body, spec, address, internal_address, relay_endpoints, asterisk_targets, sip_user_targets):
         kubernetes.apply(resource)
     ready = kubernetes.ready_deployment_replicas(namespace, service_name)
     return platform_status(
@@ -221,7 +223,7 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
         ready == spec.replicas,
         "ReplicasReady" if ready == spec.replicas else "Reconciling",
         f"{ready}/{spec.replicas} Kamailio replicas are ready",
-        {"readyReplicas": ready, "resolvedAddress": address, "addressSource": address_source},
+        {"readyReplicas": ready, "resolvedAddress": address, "addressSource": address_source, "internalAddress": internal_address},
         body.get("status", {}).get("conditions"),
         [
             ("ReferencesResolved", True, "Resolved", "Gateway references are resolved"),

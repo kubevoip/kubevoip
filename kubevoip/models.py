@@ -249,11 +249,13 @@ class SIPGatewaySpec(Model):
     network_profile_ref: LocalReference = Field(alias="networkProfileRef")
     media_relay_ref: LocalReference = Field(alias="mediaRelayRef")
     external_address: str | None = Field(default=None, alias="externalAddress", min_length=1)
+    internal_address: str | None = Field(default=None, alias="internalAddress", min_length=1)
     service: ServiceSpec = Field(default_factory=ServiceSpec)
     trunks: list[TrunkSpec] = Field(default_factory=list)
     routes: list[RouteSpec] = Field(default_factory=list)
 
     _validate_address = field_validator("external_address")(validate_external_address)
+    _validate_internal_address = field_validator("internal_address")(validate_external_address)
 
     @model_validator(mode="after")
     def validate_service(self) -> "SIPGatewaySpec":

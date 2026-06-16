@@ -125,6 +125,7 @@ SPECS = {
             "networkProfileRef": local_ref,
             "mediaRelayRef": local_ref,
             "externalAddress": address,
+            "internalAddress": address,
             "service": service,
             "trunks": array(
                 obj(

@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.2.3] - 2026-06-16
+
+### Fixed
+
+- SIP gateways now advertise separate internal and external Record-Route
+  addresses for trunk-to-user calls, including Kamailio aliases and `r2=on`
+  route-pair markers so internal phones can tear down dialogs reliably.
+
 ## [0.2.2] - 2026-06-15
 
 ### Fixed

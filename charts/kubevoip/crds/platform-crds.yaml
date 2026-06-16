@@ -339,10 +339,11 @@ spec:
                 - name
               networkProfileRef: *id002
               mediaRelayRef: *id002
-              externalAddress:
+              externalAddress: &id003
                 type: string
                 minLength: 1
                 maxLength: 253
+              internalAddress: *id003
               service:
                 type: object
                 properties:

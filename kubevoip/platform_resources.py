@@ -207,6 +207,7 @@ def build_gateway_resources(
     owner: dict[str, Any],
     spec: SIPGatewaySpec,
     external_address: str,
+    internal_address: str,
     relay_endpoints: list[str],
     asterisk_targets: dict[str, str],
     sip_user_targets: dict[str, str],
@@ -214,7 +215,7 @@ def build_gateway_resources(
     base = f"{name}-sip-gateway"
     labels = component_labels("kamailio", name)
     common = {"namespace": namespace, "instance": name, "owner": owner}
-    config = render_kamailio_config(spec, name, external_address, relay_endpoints, asterisk_targets, sip_user_targets)
+    config = render_kamailio_config(spec, name, external_address, internal_address, relay_endpoints, asterisk_targets, sip_user_targets)
     checksum = stable_hash({"kamailio.cfg": config})
     configmap = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": metadata(f"{base}-config", **common), "data": {"kamailio.cfg": config}}
     service = build_gateway_service(name, namespace, owner, spec)

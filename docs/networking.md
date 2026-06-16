@@ -17,6 +17,12 @@ the managed Service and reports `WaitingForLoadBalancer` while its ingress is
 pending. Once MetalLB or the cloud provider assigns an address, reconciliation
 continues and starts or rolls the component with that advertised address.
 
+`SIPGateway.spec.internalAddress` controls the SIP route advertised to internal
+registered endpoints. If omitted, KubeVoIP uses the SIP gateway Service ingress
+when available, otherwise the managed Service DNS name. This lets trunk-facing
+dialogs advertise a public address while LAN phones receive an internal
+Record-Route target for in-dialog requests such as `ACK`, `BYE`, and re-INVITE.
+
 Kamailio receives SIP, writes registrations to PostgreSQL, selects a route, and
 asks an RTPengine replica to rewrite SDP. Direct trunk-to-phone media flows
 through RTPengine without Asterisk. Calls to an `AsteriskPool` application flow

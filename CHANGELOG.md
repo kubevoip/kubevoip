@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.2.5] - 2026-06-16
+
+### Fixed
+
+- Asterisk pools now expose a normal internal ClusterIP service for Kamailio
+  routing while retaining a separate headless service for StatefulSet identity,
+  avoiding stale headless-service DNS during worker replacement.
+
 ## [0.2.4] - 2026-06-16
 
 ### Fixed

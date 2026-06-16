@@ -80,11 +80,13 @@ def test_gateway_service_can_be_built_before_address_resolves():
     assert service["spec"]["type"] == "LoadBalancer"
 
 
-def test_asterisk_pool_uses_private_headless_service():
+def test_asterisk_pool_uses_private_service_and_headless_identity():
     owner = {**OWNER, "kind": "AsteriskPool"}
     resources = build_asterisk_pool_resources("apps", "test", owner, AsteriskPoolSpec(replicas=2))
-    service = next(item for item in resources if item["kind"] == "Service")
+    services = {item["metadata"]["name"]: item for item in resources if item["kind"] == "Service"}
     statefulset = next(item for item in resources if item["kind"] == "StatefulSet")
-    assert service["spec"]["clusterIP"] == "None"
+    assert services["apps-asterisk-pool"]["spec"]["type"] == "ClusterIP"
+    assert services["apps-asterisk-pool-headless"]["spec"]["clusterIP"] == "None"
+    assert statefulset["spec"]["serviceName"] == "apps-asterisk-pool-headless"
     assert statefulset["spec"]["replicas"] == 2
     assert "kubevoip.com/config-hash" in statefulset["spec"]["template"]["metadata"]["annotations"]

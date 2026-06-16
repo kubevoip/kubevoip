@@ -125,6 +125,7 @@ exec rtpengine --foreground --log-stderr --table=-1 \
 
 def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, Any], spec: AsteriskPoolSpec) -> list[dict[str, Any]]:
     base = f"{name}-asterisk-pool"
+    headless_name = f"{base}-headless"
     labels = component_labels("asterisk-worker", name)
     common = {"namespace": namespace, "instance": name, "owner": owner}
     configs = render_worker_configs(spec)
@@ -135,11 +136,18 @@ def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, An
         "metadata": metadata(f"{base}-config", **common),
         "data": {key: base64.b64encode(value.encode()).decode() for key, value in configs.items()},
     }
+    service_ports = [{"name": "sip", "port": 5060, "protocol": "UDP"}]
     service = {
         "apiVersion": "v1",
         "kind": "Service",
         "metadata": metadata(base, **common),
-        "spec": {"clusterIP": "None", "selector": labels, "ports": [{"name": "sip", "port": 5060, "protocol": "UDP"}]},
+        "spec": {"type": "ClusterIP", "selector": labels, "ports": service_ports},
+    }
+    headless = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": metadata(headless_name, **common),
+        "spec": {"clusterIP": "None", "selector": labels, "ports": service_ports},
     }
     statefulset = {
         "apiVersion": "apps/v1",
@@ -147,7 +155,7 @@ def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, An
         "metadata": metadata(base, **common),
         "spec": {
             "replicas": spec.replicas,
-            "serviceName": base,
+            "serviceName": headless_name,
             "selector": {"matchLabels": labels},
             "template": {
                 "metadata": {"labels": labels, "annotations": {"kubevoip.com/config-hash": checksum}},
@@ -173,7 +181,7 @@ def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, An
             },
         },
     }
-    return [secret, service, statefulset]
+    return [secret, service, headless, statefulset]
 
 
 def build_gateway_service(

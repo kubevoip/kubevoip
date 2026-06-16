@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 
 from kubevoip.models import AsteriskPoolSpec, SIPGatewaySpec
 
@@ -57,6 +58,8 @@ def render_kamailio_config(
 ) -> str:
     routes = []
     trunks = {trunk.name: trunk for trunk in spec.trunks}
+    external_record_route = external_address.replace('"', '\\"')
+    outbound_caller_id = os.getenv("KUBEVOIP_OUTBOUND_CALLER_ID", "").replace('"', '\\"')
     for route in spec.routes:
         number = route.match.called_number.replace('"', '\\"')
         condition = f'starts_with($rU, "{number[:-3]}")' if number.endswith("...") else f'$rU == "{number}"'
@@ -68,12 +71,17 @@ def render_kamailio_config(
             action = f'$du = "sip:{target}:5060"; route(RELAY); exit;'
         else:
             target = trunks[route.target.trunk_ref or ""].termination_uri.replace('"', '\\"')
-            action = f'$du = "sip:{target}"; route(RELAY); exit;'
+            caller_id_action = (
+                f'uac_replace_from("{outbound_caller_id}", "sip:{outbound_caller_id}@{external_record_route}"); '
+                f'append_hf("P-Asserted-Identity: <sip:{outbound_caller_id}@{external_record_route}>\\r\\n"); '
+                if outbound_caller_id
+                else ""
+            )
+            action = f'remove_hf("Route"); {caller_id_action}$rd = "{target}"; $du = "sip:{target}"; route(RELAY); exit;'
         routes.append(f"if ({condition}) {{ {action} }}")
     trusted_sources = [f"src_ip == {network}" for trunk in spec.trunks for network in trunk.allowed_source_cidrs]
     trust_line = f"if ({' || '.join(trusted_sources)}) {{ setflag(1); }}" if trusted_sources else ""
     relay_sockets = " ".join(relay_endpoints)
-    external_record_route = external_address.replace('"', '\\"')
     internal_record_route = internal_address.replace('"', '\\"')
     if internal_record_route == external_record_route:
         record_route_line = "record_route();"
@@ -103,6 +111,7 @@ loadmodule "auth.so"
 loadmodule "auth_db.so"
 loadmodule "usrloc.so"
 loadmodule "registrar.so"
+loadmodule "uac.so"
 loadmodule "rtpengine.so"
 modparam("usrloc", "db_mode", 3)
 modparam("usrloc", "db_url", "__DBURL__")

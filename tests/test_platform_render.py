@@ -2,7 +2,8 @@ from kubevoip.models import SIPGatewaySpec
 from kubevoip.platform_render import render_kamailio_config
 
 
-def test_kamailio_renders_trusted_sources_and_outbound_trunk_routes():
+def test_kamailio_renders_trusted_sources_and_outbound_trunk_routes(monkeypatch):
+    monkeypatch.setenv("KUBEVOIP_OUTBOUND_CALLER_ID", "+15551234567")
     spec = SIPGatewaySpec.model_validate(
         {
             "databaseSecretRef": {"name": "db"},
@@ -26,6 +27,11 @@ def test_kamailio_renders_trusted_sources_and_outbound_trunk_routes():
     rendered = render_kamailio_config(spec, "home", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"], {}, {})
     assert "src_ip == 203.0.113.0/24" in rendered
     assert 'starts_with($rU, "+61")' in rendered
+    assert 'remove_hf("Route")' in rendered
+    assert '$rd = "example.pstn.twilio.com"' in rendered
+    assert 'loadmodule "uac.so"' in rendered
+    assert 'uac_replace_from("+15551234567", "sip:+15551234567@198.51.100.10")' in rendered
+    assert "P-Asserted-Identity: <sip:+15551234567@198.51.100.10>" in rendered
     assert '$du = "sip:example.pstn.twilio.com"' in rendered
     assert "proxy_authorize" in rendered
     assert "loose_route()" in rendered
@@ -46,3 +52,19 @@ def test_kamailio_uses_single_record_route_when_addresses_match():
     rendered = render_kamailio_config(spec, "home", "198.51.100.10", "198.51.100.10", ["udp:rtpengine:2223"], {}, {})
     assert "record_route();" in rendered
     assert "record_route_preset" not in rendered
+
+
+def test_kamailio_omits_outbound_caller_id_when_unset(monkeypatch):
+    monkeypatch.delenv("KUBEVOIP_OUTBOUND_CALLER_ID", raising=False)
+    spec = SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+            "trunks": [{"name": "twilio", "terminationUri": "example.pstn.twilio.com"}],
+            "routes": [{"match": {"calledNumber": "+..."}, "target": {"trunkRef": "twilio"}}],
+        }
+    )
+    rendered = render_kamailio_config(spec, "home", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"], {}, {})
+    assert "uac_replace_from" not in rendered
+    assert "P-Asserted-Identity" not in rendered

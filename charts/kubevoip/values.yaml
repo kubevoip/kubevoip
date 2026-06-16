@@ -1,23 +1,27 @@
 image:
   repository: ghcr.io/danohn/kubevoip
-  tag: "v0.2.3"
+  tag: "v0.2.4"
   pullPolicy: IfNotPresent
 
 asteriskImage:
   repository: ghcr.io/danohn/kubevoip-asterisk
-  tag: "v0.2.3"
+  tag: "v0.2.4"
 
 asteriskWorkerImage:
   repository: ghcr.io/danohn/kubevoip-asterisk-worker
-  tag: "v0.2.3"
+  tag: "v0.2.4"
 
 kamailioImage:
   repository: ghcr.io/danohn/kubevoip-kamailio
-  tag: "v0.2.3"
+  tag: "v0.2.4"
 
 rtpengineImage:
   repository: ghcr.io/danohn/kubevoip-rtpengine
-  tag: "v0.2.3"
+  tag: "v0.2.4"
+
+outboundCallerId:
+  existingSecret: ""
+  key: callerId
 
 serviceAccount:
   create: true

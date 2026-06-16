@@ -2,6 +2,15 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.2.4] - 2026-06-16
+
+### Fixed
+
+- Outbound trunk calls now rewrite the SIP Request-URI host to the configured
+  trunk termination domain before relay.
+- Outbound trunk calls can optionally present a caller ID from a deployment
+  environment variable while the production caller-ID API is designed.
+
 ## [0.2.3] - 2026-06-16
 
 ### Fixed

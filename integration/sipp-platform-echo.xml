@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="ISO-8859-1" ?>
 <!DOCTYPE scenario SYSTEM "sipp.dtd">
 <scenario name="KubeVoIP Platform Echo">
-  <send retrans="500" start_txn="challenge"><![CDATA[
+  <send retrans="500"><![CDATA[
     INVITE sip:600@[remote_ip]:[remote_port] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
     From: daniel <sip:daniel@[remote_ip]>;tag=[call_number]
@@ -21,7 +21,7 @@
     m=audio [media_port] RTP/AVP 0
     a=rtpmap:0 PCMU/8000
   ]]></send>
-  <recv response="407" auth="true" response_txn="challenge"/>
+  <recv response="407" auth="true"/>
   <send retrans="500" start_txn="invite"><![CDATA[
     INVITE sip:600@[remote_ip]:[remote_port] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]

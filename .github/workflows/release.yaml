@@ -99,8 +99,20 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ghcr.io/danohn/${{ matrix.image }}:${{ github.ref_name }}-${{ matrix.arch }}
+          no-cache: ${{ matrix.image == 'kubevoip' }}
           cache-from: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }},mode=max
+      - name: Verify operator image contents
+        if: matrix.image == 'kubevoip'
+        run: |
+          docker run --rm --entrypoint python "ghcr.io/danohn/kubevoip:${GITHUB_REF_NAME}-${{ matrix.arch }}" -c '
+          import inspect
+          import kubevoip.platform_resources as resources
+
+          source = inspect.getsource(resources.build_asterisk_pool_resources)
+          if "headless_name" not in source or "return [secret, service, headless, statefulset]" not in source:
+              raise SystemExit("operator image does not contain the expected AsteriskPool service split")
+          '
 
   publish:
     needs: [validate, build-images]

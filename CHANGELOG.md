@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.2.6] - 2026-06-16
+
+### Fixed
+
+- Release builds now publish the operator image without reusing cached source
+  layers and verify the pushed image contains the AsteriskPool service split
+  before creating the multi-architecture release tag.
+
 ## [0.2.5] - 2026-06-16
 
 ### Fixed

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="ISO-8859-1" ?>
 <!DOCTYPE scenario SYSTEM "sipp.dtd">
 <scenario name="KubeVoIP Platform Echo">
-  <send retrans="500"><![CDATA[
+  <send retrans="500" start_txn="challenge"><![CDATA[
     INVITE sip:600@[remote_ip]:[remote_port] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
     From: daniel <sip:daniel@[remote_ip]>;tag=[call_number]
@@ -21,8 +21,8 @@
     m=audio [media_port] RTP/AVP 0
     a=rtpmap:0 PCMU/8000
   ]]></send>
-  <recv response="407" auth="true"/>
-  <send retrans="500"><![CDATA[
+  <recv response="407" auth="true" response_txn="challenge"/>
+  <send retrans="500" start_txn="invite"><![CDATA[
     INVITE sip:600@[remote_ip]:[remote_port] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
     [authentication username=daniel password=phone-password]
@@ -43,10 +43,10 @@
     m=audio [media_port] RTP/AVP 0
     a=rtpmap:0 PCMU/8000
   ]]></send>
-  <recv response="100" optional="true"/>
-  <recv response="200" rrs="true"/>
-  <send><![CDATA[
-    ACK sip:600@[remote_ip]:[remote_port] SIP/2.0
+  <recv response="100" optional="true" response_txn="invite"/>
+  <recv response="200" rrs="true" response_txn="invite"/>
+  <send ack_txn="invite"><![CDATA[
+    ACK [next_url] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
     From: daniel <sip:daniel@[remote_ip]>;tag=[call_number]
     To: <sip:600@[remote_ip]:[remote_port]>[peer_tag_param]
@@ -58,8 +58,8 @@
     Content-Length: 0
   ]]></send>
   <pause milliseconds="2000"/>
-  <send retrans="500"><![CDATA[
-    BYE sip:600@[remote_ip]:[remote_port] SIP/2.0
+  <send retrans="500" start_txn="bye"><![CDATA[
+    BYE [next_url] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
     From: daniel <sip:daniel@[remote_ip]>;tag=[call_number]
     To: <sip:600@[remote_ip]:[remote_port]>[peer_tag_param]
@@ -70,5 +70,5 @@
     Max-Forwards: 70
     Content-Length: 0
   ]]></send>
-  <recv response="200"/>
+  <recv response="200" response_txn="bye"/>
 </scenario>

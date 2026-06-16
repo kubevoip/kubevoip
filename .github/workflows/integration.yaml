@@ -221,6 +221,13 @@ jobs:
           kubectl -n asterisk-demo logs statefulset/demo-asterisk || true
           kubectl -n asterisk-demo logs deployment/kubevoip-kubevoip || true
           kubectl -n kubevoip-platform get networkprofile,sipuser,mediarelay,asteriskpool,sipgateway,pods,services -o wide || true
+          kubectl -n kubevoip-platform get endpoints,endpointslices -o wide || true
+          kubectl -n kubevoip-platform describe pod/sipp-after-asterisk-replacement || true
+          kubectl -n kubevoip-platform logs pod/sipp-after-asterisk-replacement || true
+          kubectl -n kubevoip-platform logs pod/sipp-after-kamailio-replacement || true
+          kubectl -n kubevoip-platform logs pod/sipp-platform-echo || true
           kubectl -n kubevoip-platform logs deployment/kubevoip-kubevoip || true
           kubectl -n kubevoip-platform logs deployment/home-sip-gateway || true
+          kubectl -n kubevoip-platform logs statefulset/applications-asterisk-pool || true
+          kubectl -n kubevoip-platform logs statefulset/applications-asterisk-pool --previous || true
           kubectl -n kubevoip-platform logs deployment/home-rtpengine-0 || true

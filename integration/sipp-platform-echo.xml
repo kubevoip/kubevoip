@@ -57,4 +57,18 @@
     Max-Forwards: 70
     Content-Length: 0
   ]]></send>
+  <pause milliseconds="2000"/>
+  <send retrans="500"><![CDATA[
+    BYE sip:600@[remote_ip]:[remote_port] SIP/2.0
+    Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+    From: daniel <sip:daniel@[remote_ip]>;tag=[call_number]
+    To: <sip:600@[remote_ip]:[remote_port]>[peer_tag_param]
+    Call-ID: [call_id]
+    CSeq: 3 BYE
+    Contact: <sip:daniel@[local_ip]:[local_port]>
+    [routes]
+    Max-Forwards: 70
+    Content-Length: 0
+  ]]></send>
+  <recv response="200"/>
 </scenario>

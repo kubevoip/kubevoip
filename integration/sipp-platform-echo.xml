@@ -22,7 +22,7 @@
     a=rtpmap:0 PCMU/8000
   ]]></send>
   <recv response="407" auth="true"/>
-  <send retrans="500" start_txn="invite"><![CDATA[
+  <send retrans="500"><![CDATA[
     INVITE sip:600@[remote_ip]:[remote_port] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
     [authentication username=daniel password=phone-password]
@@ -43,9 +43,9 @@
     m=audio [media_port] RTP/AVP 0
     a=rtpmap:0 PCMU/8000
   ]]></send>
-  <recv response="100" optional="true" response_txn="invite"/>
-  <recv response="200" rrs="true" response_txn="invite"/>
-  <send ack_txn="invite"><![CDATA[
+  <recv response="100" optional="true"/>
+  <recv response="200" rrs="true"/>
+  <send><![CDATA[
     ACK [next_url] SIP/2.0
     Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
     From: daniel <sip:daniel@[remote_ip]>;tag=[call_number]

@@ -20,7 +20,7 @@ The platform release pins tested runtime images from the component repositories
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.2 \
+  --version 0.4.3 \
   --namespace telephony --create-namespace
 ```
 
@@ -35,9 +35,9 @@ namespace. Install a separate release for each telephony namespace:
 
 ```bash
 helm install kubevoip-home oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.2 --namespace telephony-home --create-namespace
+  --version 0.4.3 --namespace telephony-home --create-namespace
 helm install kubevoip-office oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.2 --namespace telephony-office --create-namespace
+  --version 0.4.3 --namespace telephony-office --create-namespace
 ```
 
 CRDs remain cluster-scoped Kubernetes resources shared by all releases.
@@ -51,7 +51,7 @@ for testing, so you do not need to choose a production database first.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.2 \
+  --version 0.4.3 \
   --namespace telephony --create-namespace
 
 kubectl apply -f examples/quickstart-two-phones.yaml

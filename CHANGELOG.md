@@ -2,6 +2,15 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.4.3] - 2026-06-17
+
+### Changed
+
+- Pin the platform chart to `v0.4.3` runtime images from the split Kamailio,
+  RTPengine, and Asterisk repositories.
+- Runtime packages now publish with repository-specific OCI source labels so
+  GHCR links each image to its component repository.
+
 ## [0.4.2] - 2026-06-17
 
 ### Changed

@@ -3,10 +3,6 @@ image:
   tag: "v0.4.0"
   pullPolicy: IfNotPresent
 
-asteriskImage:
-  repository: ghcr.io/danohn/kubevoip-asterisk
-  tag: "v0.4.0"
-
 asteriskWorkerImage:
   repository: ghcr.io/danohn/kubevoip-asterisk-worker
   tag: "v0.4.0"

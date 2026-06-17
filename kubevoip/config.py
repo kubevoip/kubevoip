@@ -4,11 +4,7 @@ import os
 
 GROUP = "kubevoip.com"
 VERSION = "v1alpha1"
-PLURAL = "asterisks"
 FIELD_MANAGER = "kubevoip"
-DEFAULT_ASTERISK_IMAGE = os.getenv(
-    "KUBEVOIP_ASTERISK_IMAGE", "ghcr.io/danohn/kubevoip-asterisk:v0.4.0"
-)
 DEFAULT_ASTERISK_WORKER_IMAGE = os.getenv(
     "KUBEVOIP_ASTERISK_WORKER_IMAGE", "ghcr.io/danohn/kubevoip-asterisk-worker:v0.4.0"
 )
@@ -18,5 +14,4 @@ DEFAULT_KAMAILIO_IMAGE = os.getenv(
 DEFAULT_RTPENGINE_IMAGE = os.getenv(
     "KUBEVOIP_RTPENGINE_IMAGE", "ghcr.io/danohn/kubevoip-rtpengine:v0.4.0"
 )
-MAX_RTP_PORTS = 200
 MAX_PLATFORM_RTP_PORTS = 2000

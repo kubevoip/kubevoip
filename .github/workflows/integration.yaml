@@ -27,10 +27,9 @@ jobs:
           context: .
           file: runtime/Dockerfile
           load: true
-          tags: kubevoip-asterisk:test
-          cache-from: type=gha,scope=integration-asterisk
-          cache-to: type=gha,scope=integration-asterisk,mode=max
-      - run: docker tag kubevoip-asterisk:test kubevoip-asterisk-worker:test
+          tags: kubevoip-asterisk-worker:test
+          cache-from: type=gha,scope=integration-asterisk-worker
+          cache-to: type=gha,scope=integration-asterisk-worker,mode=max
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
@@ -58,7 +57,7 @@ jobs:
       - uses: helm/kind-action@v1
         with:
           cluster_name: kind
-      - run: kind load docker-image kubevoip:test kubevoip-asterisk:test kubevoip-asterisk-worker:test kubevoip-kamailio:test kubevoip-rtpengine:test kubevoip-sipp:test
+      - run: kind load docker-image kubevoip:test kubevoip-asterisk-worker:test kubevoip-kamailio:test kubevoip-rtpengine:test kubevoip-sipp:test
       - uses: azure/setup-helm@v5
       - run: |
           kubectl apply -f examples/namespace.yaml
@@ -67,7 +66,6 @@ jobs:
             helm install kubevoip charts/kubevoip \
               --namespace "${namespace}" \
               --set image.repository=kubevoip --set image.tag=test \
-              --set asteriskImage.repository=kubevoip-asterisk --set asteriskImage.tag=test \
               --set asteriskWorkerImage.repository=kubevoip-asterisk-worker --set asteriskWorkerImage.tag=test \
               --set kamailioImage.repository=kubevoip-kamailio --set kamailioImage.tag=test \
               --set rtpengineImage.repository=kubevoip-rtpengine --set rtpengineImage.tag=test
@@ -89,36 +87,6 @@ jobs:
             exit 1
           fi
           kubectl -n asterisk-demo delete secret isolation-check
-      - run: kubectl apply -f examples/secret-alice-sip.yaml -f examples/asterisk-demo.yaml
-      - run: |
-          kubectl -n asterisk-demo wait --for=create statefulset/demo-asterisk --timeout=60s
-          kubectl -n asterisk-demo wait --for=condition=Ready pod -l app.kubernetes.io/name=asterisk --timeout=180s
-      - name: Complete authenticated echo call
-        run: |
-          kubectl -n asterisk-demo create configmap sipp-scenario --from-file=integration/sipp-echo.xml
-          kubectl -n asterisk-demo run sipp --restart=Never --image=kubevoip-sipp:test \
-            --overrides='{"spec":{"containers":[{"name":"sipp","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-echo.xml","-s","600","demo-asterisk","-m","1","-timeout","20s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-scenario"}}]}}'
-          kubectl -n asterisk-demo wait --for=jsonpath='{.status.phase}'=Succeeded pod/sipp --timeout=60s
-      - name: Rotate credentials and verify rollout hash
-        run: |
-          before="$(kubectl -n asterisk-demo get ast demo -o jsonpath='{.status.configHash}')"
-          kubectl -n asterisk-demo patch secret alice-sip --type=merge -p '{"data":{"password":"cm90YXRlZA=="}}'
-          for attempt in $(seq 1 18); do
-            after="$(kubectl -n asterisk-demo get ast demo -o jsonpath='{.status.configHash}')"
-            test "$before" != "$after" && exit 0
-            sleep 5
-          done
-          exit 1
-      - name: Verify owned-resource cleanup
-        run: |
-          kubectl -n asterisk-demo delete ast demo --wait=true
-          for attempt in $(seq 1 30); do
-            count="$(kubectl -n asterisk-demo get secret,configmap,service,statefulset \
-              -l app.kubernetes.io/managed-by=kubevoip --no-headers 2>/dev/null | wc -l)"
-            test "$count" -eq 0 && exit 0
-            sleep 2
-          done
-          exit 1
       - name: Reconcile scalable platform
         run: |
           kubectl apply -f integration/platform.yaml
@@ -237,8 +205,6 @@ jobs:
       - name: Diagnostics
         if: failure()
         run: |
-          kubectl -n asterisk-demo get ast,pods,services -o wide || true
-          kubectl -n asterisk-demo logs statefulset/demo-asterisk || true
           kubectl -n asterisk-demo logs deployment/kubevoip-kubevoip || true
           kubectl -n kubevoip-platform get networkprofile,callscope,dialpolicy,sipuser,siptrunk,callroute,mediarelay,asteriskpool,sipgateway,pods,services -o wide || true
           kubectl -n kubevoip-platform get endpoints,endpointslices -o wide || true

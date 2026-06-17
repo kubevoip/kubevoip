@@ -37,7 +37,7 @@ metadata:
     {{- include "kubevoip.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["kubevoip.com"]
-    resources: ["asterisks", "asterisks/status", "asterisks/finalizers", "networkprofiles", "networkprofiles/status", "networkprofiles/finalizers", "callscopes", "callscopes/status", "callscopes/finalizers", "dialpolicies", "dialpolicies/status", "dialpolicies/finalizers", "sipusers", "sipusers/status", "sipusers/finalizers", "siptrunks", "siptrunks/status", "siptrunks/finalizers", "callroutes", "callroutes/status", "callroutes/finalizers", "mediarelays", "mediarelays/status", "mediarelays/finalizers", "asteriskpools", "asteriskpools/status", "asteriskpools/finalizers", "sipgateways", "sipgateways/status", "sipgateways/finalizers"]
+    resources: ["networkprofiles", "networkprofiles/status", "networkprofiles/finalizers", "callscopes", "callscopes/status", "callscopes/finalizers", "dialpolicies", "dialpolicies/status", "dialpolicies/finalizers", "sipusers", "sipusers/status", "sipusers/finalizers", "siptrunks", "siptrunks/status", "siptrunks/finalizers", "callroutes", "callroutes/status", "callroutes/finalizers", "mediarelays", "mediarelays/status", "mediarelays/finalizers", "asteriskpools", "asteriskpools/status", "asteriskpools/finalizers", "sipgateways", "sipgateways/status", "sipgateways/finalizers"]
     verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
     resources: ["configmaps", "secrets", "services", "pods"]

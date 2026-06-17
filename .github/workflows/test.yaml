@@ -32,10 +32,10 @@ jobs:
           grep -q -- '--namespace=telephony' /tmp/kubevoip.yaml
       - name: Validate CRD on Kubernetes
         uses: helm/kind-action@v1
-      - run: kubectl apply --dry-run=server -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
-      - run: kubectl apply -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
-      - run: kubectl apply -f examples/namespace.yaml && kubectl create namespace kubevoip-platform
-      - run: kubectl apply --dry-run=server -f examples/platform.yaml -f integration/platform.yaml
+      - run: kubectl apply --dry-run=server -f config/crd/platform-crds.yaml
+      - run: kubectl apply -f config/crd/platform-crds.yaml
+      - run: kubectl apply -f examples/namespace.yaml && kubectl create namespace kubevoip-platform && kubectl create namespace telephony
+      - run: kubectl apply --dry-run=server -f examples/platform.yaml -f examples/quickstart-two-phones.yaml -f integration/platform.yaml
   containers:
     name: containers (${{ matrix.platform }})
     strategy:
@@ -65,9 +65,9 @@ jobs:
           file: runtime/Dockerfile
           platforms: ${{ matrix.platform }}
           push: false
-          tags: kubevoip-asterisk:test
-          cache-from: type=gha,scope=asterisk-${{ matrix.arch }}
-          cache-to: type=gha,scope=asterisk-${{ matrix.arch }},mode=max
+          tags: kubevoip-asterisk-worker:test
+          cache-from: type=gha,scope=asterisk-worker-${{ matrix.arch }}
+          cache-to: type=gha,scope=asterisk-worker-${{ matrix.arch }},mode=max
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .

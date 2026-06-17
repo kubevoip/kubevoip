@@ -27,26 +27,6 @@ def condition(
     }
 
 
-def success_status(
-    generation: int,
-    checksum: str,
-    ready_replicas: int,
-    previous: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    ready = ready_replicas >= 1
-    return {
-        "observedGeneration": generation,
-        "phase": "Ready" if ready else "Reconciling",
-        "ready": ready,
-        "configHash": checksum,
-        "readyReplicas": ready_replicas,
-        "conditions": [
-            condition("Ready", "True" if ready else "False", "StatefulSetReady" if ready else "Reconciling", "Asterisk is ready" if ready else "Waiting for the Asterisk Pod", generation, previous),
-            condition("ConfigRendered", "True", "Rendered", "Asterisk configuration rendered successfully", generation, previous),
-        ],
-    }
-
-
 def error_status(
     generation: int,
     reason: str,

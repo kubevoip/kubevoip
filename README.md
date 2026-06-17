@@ -3,11 +3,9 @@
 [![Test](https://github.com/danohn/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/test.yaml)
 [![Integration](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml)
 
-KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.4 provides
-provider-neutral Kamailio gateways, PostgreSQL-backed dynamic routing,
-CUCM-inspired dial policies, RTPengine media relays, PostgreSQL-backed SIP
-users, and interchangeable Asterisk application workers. The original
-single-instance `Asterisk` API remains available under `kubevoip.com`.
+KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.4 runs Kamailio
+gateways, RTPengine media relays, SIP users, dial policies, and Asterisk worker
+pods, with runtime data stored in PostgreSQL.
 
 Project home: [https://kubevoip.com](https://kubevoip.com)
 
@@ -18,10 +16,6 @@ helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
   --version 0.4.0 \
   --namespace telephony --create-namespace
 ```
-
-KubeVoIP v0.4 installs only `kubevoip.com/v1alpha1` CRDs. Existing v0.1
-`kubevoip.io` resources must be exported and recreated; see
-[docs/migration-v0.2.md](docs/migration-v0.2.md).
 
 KubeVoIP v0.4 requires `CallScope` and `DialPolicy` resources for platform
 routing. v0.3 `SIPUser`, `SIPTrunk`, and `CallRoute` manifests need to be
@@ -41,9 +35,44 @@ helm install kubevoip-office oci://ghcr.io/danohn/charts/kubevoip \
 
 CRDs remain cluster-scoped Kubernetes resources shared by all releases.
 
+## Quickstart
+
+This quickstart creates a SIP platform with two users: `alice` on extension
+`100` and `bob` on extension `101`. It assumes your cluster can provision UDP
+`LoadBalancer` Services. It also includes a single-pod PostgreSQL Deployment
+for testing, so you do not need to choose a production database first.
+
+```bash
+helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
+  --version 0.4.0 \
+  --namespace telephony --create-namespace
+
+kubectl apply -f examples/quickstart-two-phones.yaml
+kubectl -n telephony rollout status deployment/postgres --timeout=180s
+kubectl -n telephony wait --for=create deployment/main-sip-gateway --timeout=180s
+kubectl -n telephony rollout status deployment/main-sip-gateway --timeout=240s
+kubectl -n telephony wait --for=condition=Ready sipuser/alice sipuser/bob --timeout=180s
+kubectl -n telephony wait --for=condition=Ready callroute/user-100 callroute/user-101 --timeout=180s
+kubectl -n telephony get service main-sip-gateway main-rtpengine-0
+```
+
+Register two SIP clients against the external address assigned to the
+`main-sip-gateway` Service:
+
+| Phone | SIP username | Password | Extension |
+| --- | --- | --- | --- |
+| Alice | `alice` | `alice-demo-password` | `100` |
+| Bob | `bob` | `bob-demo-password` | `101` |
+
+Alice can call Bob at `101`; Bob can call Alice at `100`.
+
+The quickstart also creates one RTPengine `LoadBalancer` Service for media.
+Your network must allow UDP `5060` to the gateway address and UDP
+`20000-20049` to the RTPengine address. Do not translate SIP or RTP ports.
+See [docs/networking.md](docs/networking.md) for the networking details.
+
 ## APIs
 
-- `Asterisk`: the v0.1 single-PBX model, moved unchanged to `kubevoip.com`.
 - `NetworkProfile`: shared external addressing and local-network policy.
 - `CallScope`: a searchable bucket of call routes, such as internal or external.
 - `DialPolicy`: an ordered list of scopes a caller is allowed to search.
@@ -54,12 +83,11 @@ CRDs remain cluster-scoped Kubernetes resources shared by all releases.
 - `AsteriskPool`: private application workers, currently providing Echo.
 - `SIPGateway`: Kamailio registration and media-relay edge policy.
 
-Platform resources are experimental in v0.4. References are namespaced and
-must point to resources in the same namespace.
+Platform resources are experimental in v0.4. References are namespace-local.
 
-The checked-in examples are intentionally small. They demonstrate the namespace
-and core platform resources without assuming a public address, SIP provider, or
-database implementation:
+The checked-in examples are small on purpose. They show the namespace and core
+platform resources without assuming a public address, SIP provider, or database
+implementation:
 
 ```bash
 kubectl apply -f examples/namespace.yaml
@@ -70,24 +98,24 @@ kubectl -n asterisk-demo get networkprofile,mediarelay,asteriskpool
 A PostgreSQL database and a standard connection Secret are required before
 creating `SIPGateway` and `SIPUser` resources. KubeVoIP does not install or
 require CNPG. The Secret keys are `host`, `port`, `dbname`, `user`, and
-`password`. Trunk credentials and outbound caller ID values are referenced from
-Secrets through `SIPTrunk`; they should not be stored in ConfigMaps or Git.
+`password`. `SIPTrunk` resources reference trunk credentials and outbound
+caller ID values from Secrets. Keep those values out of ConfigMaps and Git.
 
 Kamailio reads users, trunks, routes, scopes, and dial policies from
 PostgreSQL at request time. Normal changes to `SIPUser`, `SIPTrunk`,
 `CallRoute`, `CallScope`, and `DialPolicy` update database rows and do not roll
 Kamailio pods. Static gateway/network changes can still roll pods.
 
-## External Networking
+## External networking
 
 Set `NetworkProfile.spec.externalAddress.value` to an IP address or hostname,
 or set `source: Service` to discover addresses from managed LoadBalancer
 Services. Component overrides and RTPengine replica overrides take precedence.
 
 KubeVoIP rewrites SIP advertised addresses and RTPengine SDP addresses. Public
-forwarding must preserve UDP port numbers: SIP `5060` and each assigned
-RTPengine range must use identical public and private ports. Provider load
-balancer behavior, firewall rules, DNS, router forwarding, and trunk-provider
+forwarding needs identical public and private UDP ports: SIP `5060` and each
+assigned RTPengine range. Provider load
+balancer behavior, firewall rules, DNS, router forwarding, and trunk
 configuration remain the user's responsibility.
 
 `Service` and `HostNetwork` media modes are experimental. UDP SIP is the only
@@ -100,8 +128,8 @@ Calls arriving from those networks bypass subscriber authentication and use the
 trunk's inbound `DialPolicy`. Other INVITEs must authenticate as a `SIPUser`
 and use the user's `DialPolicy`. `CallRoute` resources can target a
 `sipUserRef`, `asteriskPoolRef`, or `trunkRef`. Outbound trunks can present
-caller ID and answer provider digest challenges. Digest passwords are converted
-to realm-bound HA1 values and stored in PostgreSQL; HA1 must be treated as
+caller ID and answer provider digest challenges. KubeVoIP converts digest
+passwords to realm-bound HA1 values and stores them in PostgreSQL. Treat HA1 as
 credential-equivalent secret material.
 
 See [docs/networking.md](docs/networking.md) for precedence and packet-flow
@@ -117,25 +145,23 @@ uv run ruff check .
 uv run pytest
 helm lint charts/kubevoip
 helm template kubevoip charts/kubevoip
-kubectl apply --dry-run=server -f config/crd/asterisk-crd.yaml
 kubectl apply --dry-run=server -f config/crd/platform-crds.yaml
 ```
 
 Run the controller against the current cluster:
 
 ```bash
-kubectl apply -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
+kubectl apply -f config/crd/platform-crds.yaml
 uv run kopf run kubevoip/main.py --namespace telephony --verbose
 ```
 
-## Release Scope
+## Release scope
 
-Releases publish multi-architecture operator, Asterisk, Asterisk-worker,
-Kamailio, and RTPengine images plus the OCI Helm chart. Asterisk 22 LTS,
-Kamailio 5.6.3, and RTPengine 10.5.3.5 are pinned for v0.4.
+Releases publish multi-architecture operator, Asterisk-worker, Kamailio, and
+RTPengine images plus the OCI Helm chart. Asterisk 22 LTS, Kamailio 5.6.3,
+and RTPengine 10.5.3.5 are pinned for v0.4.
 
-Helm intentionally leaves CRDs installed on uninstall. Remove the old
-`asterisks.kubevoip.io` CRD only after migration has been verified.
+Helm leaves CRDs installed on uninstall.
 
 ## License
 

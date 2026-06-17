@@ -3,13 +3,6 @@ from pathlib import Path
 import yaml
 
 
-def test_crd_copies_are_semantically_identical():
-    root = Path(__file__).parents[1]
-    standalone = yaml.safe_load((root / "config/crd/asterisk-crd.yaml").read_text())
-    chart = yaml.safe_load((root / "charts/kubevoip/crds/asterisk-crd.yaml").read_text())
-    assert standalone == chart
-
-
 def test_platform_crd_copies_are_semantically_identical():
     root = Path(__file__).parents[1]
     standalone = list(yaml.safe_load_all((root / "config/crd/platform-crds.yaml").read_text()))

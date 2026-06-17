@@ -3,8 +3,8 @@
 import kopf
 from kubernetes.client import ApiException
 
-from kubevoip.config import GROUP, PLURAL, VERSION
-from kubevoip.controller import DependencyError, InvalidSpecError, WaitingForLoadBalancerError, reconcile
+from kubevoip.config import GROUP, VERSION
+from kubevoip.controller import DependencyError, InvalidSpecError, WaitingForLoadBalancerError
 from kubevoip.k8s import Kubernetes
 from kubevoip.platform_controller import (
     delete_call_route_controller,
@@ -54,18 +54,6 @@ def _run(reconciler, body, spec, patch, logger) -> None:
     except ApiException as error:
         patch.status.update(error_status(generation, "KubernetesApiError", str(error), previous))
         raise kopf.TemporaryError(str(error), delay=15) from error
-
-
-@kopf.on.create(GROUP, VERSION, PLURAL)
-@kopf.on.update(GROUP, VERSION, PLURAL)
-@kopf.on.resume(GROUP, VERSION, PLURAL)
-def reconcile_asterisk(body, spec, patch, logger, **_):
-    _run(reconcile, body, spec, patch, logger)
-
-
-@kopf.timer(GROUP, VERSION, PLURAL, interval=30.0, sharp=True)
-def refresh_asterisk(body, spec, patch, logger, **_):
-    _run(reconcile, body, spec, patch, logger)
 
 
 def _handlers(plural, reconciler):

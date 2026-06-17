@@ -5,7 +5,6 @@ from typing import Any
 
 from kubevoip.models import AsteriskPoolSpec, MediaRelaySpec, SIPGatewaySpec
 from kubevoip.platform_render import render_kamailio_config, render_worker_configs, stable_hash
-from kubevoip.resources import metadata
 
 
 def component_labels(component: str, name: str) -> dict[str, str]:
@@ -14,6 +13,29 @@ def component_labels(component: str, name: str) -> dict[str, str]:
         "app.kubernetes.io/instance": name,
         "app.kubernetes.io/managed-by": "kubevoip",
         "app.kubernetes.io/part-of": "kubevoip",
+    }
+
+
+def owner_reference(body: dict[str, Any]) -> list[dict[str, Any]]:
+    meta = body["metadata"]
+    return [
+        {
+            "apiVersion": body["apiVersion"],
+            "kind": body["kind"],
+            "name": meta["name"],
+            "uid": meta["uid"],
+            "controller": True,
+            "blockOwnerDeletion": True,
+        }
+    ]
+
+
+def metadata(name: str, namespace: str, instance: str, owner: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": name,
+        "namespace": namespace,
+        "labels": component_labels("kubevoip", instance),
+        "ownerReferences": owner_reference(owner),
     }
 
 

@@ -1,8 +1,8 @@
-# Migrating To v0.4
+# Migrating to v0.4
 
-Version 0.4 keeps `kubevoip.com/v1alpha1` but intentionally changes the
-platform routing API. Routes now live in `CallScope` buckets, and callers use
-`DialPolicy` resources to decide which buckets they may search.
+Version 0.4 keeps `kubevoip.com/v1alpha1` but changes the routing API. Routes
+now live in `CallScope` buckets, and callers use `DialPolicy` resources to
+decide which buckets they may search.
 
 Create scopes and policies before updating users, trunks, and routes:
 

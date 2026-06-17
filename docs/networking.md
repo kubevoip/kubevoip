@@ -49,9 +49,9 @@ Normal changes to SIP users, trunks, routes, scopes, policies, caller ID, and
 digest credentials update PostgreSQL and do not roll Kamailio pods. Static
 gateway/network changes can still roll pods.
 
-Public forwarding must preserve port numbers. Forward UDP `5060` to the
-Kamailio address and each RTPengine replica's assigned range to that replica's
-address. Do not translate those ports.
+Forwarding needs the same public and private port numbers. Send UDP `5060` to
+the Kamailio address and each RTPengine replica's assigned range to that
+replica's address. Do not translate those ports.
 
 `HostNetwork` avoids Kubernetes Service NAT for media but binds ports directly
 on selected nodes. Scheduling, node public addresses, firewall rules, and port

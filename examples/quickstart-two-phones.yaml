@@ -1,0 +1,204 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-app
+  namespace: telephony
+type: Opaque
+stringData:
+  host: postgres
+  port: "5432"
+  dbname: kubevoip
+  user: kubevoip
+  password: kubevoip-demo-password
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alice-sip
+  namespace: telephony
+type: Opaque
+stringData:
+  password: alice-demo-password
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bob-sip
+  namespace: telephony
+type: Opaque
+stringData:
+  password: bob-demo-password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: telephony
+spec:
+  selector:
+    app: kubevoip-demo-postgres
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: telephony
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubevoip-demo-postgres
+  template:
+    metadata:
+      labels:
+        app: kubevoip-demo-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: kubevoip
+            - name: POSTGRES_USER
+              value: kubevoip
+            - name: POSTGRES_PASSWORD
+              value: kubevoip-demo-password
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, kubevoip]
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: NetworkProfile
+metadata:
+  name: public
+  namespace: telephony
+spec:
+  externalAddress:
+    source: Service
+  localNetworks:
+    - 10.0.0.0/8
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: MediaRelay
+metadata:
+  name: main
+  namespace: telephony
+spec:
+  replicas: 1
+  networkProfileRef:
+    name: public
+  media:
+    start: 20000
+    end: 20049
+  network:
+    mode: Service
+    service:
+      type: LoadBalancer
+      externalTrafficPolicy: Local
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: SIPGateway
+metadata:
+  name: main
+  namespace: telephony
+spec:
+  replicas: 1
+  databaseSecretRef:
+    name: postgres-app
+  networkProfileRef:
+    name: public
+  mediaRelayRef:
+    name: main
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: CallScope
+metadata:
+  name: internal
+  namespace: telephony
+spec:
+  gatewayRef:
+    name: main
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: DialPolicy
+metadata:
+  name: internal-only
+  namespace: telephony
+spec:
+  gatewayRef:
+    name: main
+  scopes:
+    - name: internal
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: SIPUser
+metadata:
+  name: alice
+  namespace: telephony
+spec:
+  gatewayRef:
+    name: main
+  dialPolicyRef:
+    name: internal-only
+  extension: "100"
+  authUsername: alice
+  callerId: Alice <100>
+  passwordSecretRef:
+    name: alice-sip
+    key: password
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: SIPUser
+metadata:
+  name: bob
+  namespace: telephony
+spec:
+  gatewayRef:
+    name: main
+  dialPolicyRef:
+    name: internal-only
+  extension: "101"
+  authUsername: bob
+  callerId: Bob <101>
+  passwordSecretRef:
+    name: bob-sip
+    key: password
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: CallRoute
+metadata:
+  name: user-100
+  namespace: telephony
+spec:
+  gatewayRef:
+    name: main
+  scopeRef:
+    name: internal
+  priority: 100
+  match:
+    calledNumber: "100"
+  target:
+    sipUserRef: alice
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: CallRoute
+metadata:
+  name: user-101
+  namespace: telephony
+spec:
+  gatewayRef:
+    name: main
+  scopeRef:
+    name: internal
+  priority: 100
+  match:
+    calledNumber: "101"
+  target:
+    sipUserRef: bob

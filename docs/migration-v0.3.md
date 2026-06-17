@@ -1,7 +1,7 @@
-# Migrating To v0.3
+# Migrating to v0.3
 
-Version 0.3 keeps `kubevoip.com/v1alpha1` but intentionally changes the
-platform API. `SIPGateway.spec.trunks` and `SIPGateway.spec.routes` are removed.
+Version 0.3 keeps `kubevoip.com/v1alpha1` but changes the platform API.
+`SIPGateway.spec.trunks` and `SIPGateway.spec.routes` are removed.
 Create separate `SIPTrunk` and `CallRoute` resources in the same namespace as
 the gateway.
 

@@ -17,7 +17,7 @@ jobs:
       - run: helm lint charts/kubevoip && helm template kubevoip charts/kubevoip >/dev/null
       - name: Validate CRD on Kubernetes
         uses: helm/kind-action@v1
-      - run: kubectl apply --dry-run=server -f config/crd/asterisk-crd.yaml -f config/crd/platform-crds.yaml
+      - run: kubectl apply --dry-run=server -f config/crd/platform-crds.yaml
       - run: scripts/check-versions.sh "${GITHUB_REF_NAME}"
       - name: Verify release paths
         run: |
@@ -40,16 +40,6 @@ jobs:
             arch: amd64
           - image: kubevoip
             file: Dockerfile
-            runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            arch: arm64
-          - image: kubevoip-asterisk
-            file: runtime/Dockerfile
-            runner: ubuntu-24.04
-            platform: linux/amd64
-            arch: amd64
-          - image: kubevoip-asterisk
-            file: runtime/Dockerfile
             runner: ubuntu-24.04-arm
             platform: linux/arm64
             arch: arm64
@@ -127,7 +117,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create multi-architecture image manifests
         run: |
-          for image in kubevoip kubevoip-asterisk kubevoip-asterisk-worker kubevoip-kamailio kubevoip-rtpengine; do
+          for image in kubevoip kubevoip-asterisk-worker kubevoip-kamailio kubevoip-rtpengine; do
             docker buildx imagetools create \
               --tag "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}" \
               "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}-amd64" \

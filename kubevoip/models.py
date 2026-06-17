@@ -201,21 +201,45 @@ class DatabaseSecretRef(Model):
     name: str = Field(min_length=1)
 
 
-class TrunkAuthentication(Model):
-    mode: Literal["IP"] = "IP"
+class DigestAuthentication(Model):
+    username_secret_ref: SecretKeyRef = Field(alias="usernameSecretRef")
+    password_secret_ref: SecretKeyRef = Field(alias="passwordSecretRef")
+    realm: str | None = Field(default=None, min_length=1, max_length=253)
 
 
-class TrunkSpec(Model):
-    name: str = Field(pattern=r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", max_length=40)
-    termination_uri: str = Field(alias="terminationUri", min_length=1)
-    authentication: TrunkAuthentication = Field(default_factory=TrunkAuthentication)
+class TrunkOutboundAuthentication(Model):
+    mode: Literal["None", "Digest"] = "None"
+    digest: DigestAuthentication | None = None
+
+    @model_validator(mode="after")
+    def validate_digest(self) -> "TrunkOutboundAuthentication":
+        if self.mode == "Digest" and not self.digest:
+            raise ValueError("Digest authentication requires digest settings")
+        if self.mode == "None" and self.digest:
+            raise ValueError("digest settings require mode Digest")
+        return self
+
+
+class TrunkInboundSpec(Model):
     allowed_source_cidrs: list[str] = Field(default_factory=list, alias="allowedSourceCidrs")
 
     @model_validator(mode="after")
-    def validate_cidrs(self) -> "TrunkSpec":
+    def validate_cidrs(self) -> "TrunkInboundSpec":
         for network in self.allowed_source_cidrs:
             ipaddress.ip_network(network, strict=False)
         return self
+
+
+class TrunkOutboundSpec(Model):
+    caller_id_secret_ref: SecretKeyRef | None = Field(default=None, alias="callerIdSecretRef")
+    authentication: TrunkOutboundAuthentication = Field(default_factory=TrunkOutboundAuthentication)
+
+
+class SIPTrunkSpec(Model):
+    gateway_ref: LocalReference = Field(alias="gatewayRef")
+    termination_uri: str = Field(alias="terminationUri", min_length=1)
+    inbound: TrunkInboundSpec = Field(default_factory=TrunkInboundSpec)
+    outbound: TrunkOutboundSpec = Field(default_factory=TrunkOutboundSpec)
 
 
 class RouteMatch(Model):
@@ -237,7 +261,9 @@ class RouteTarget(Model):
         return self
 
 
-class RouteSpec(Model):
+class CallRouteSpec(Model):
+    gateway_ref: LocalReference = Field(alias="gatewayRef")
+    priority: int = Field(default=1000, ge=0, le=1_000_000)
     match: RouteMatch
     target: RouteTarget
 
@@ -251,8 +277,6 @@ class SIPGatewaySpec(Model):
     external_address: str | None = Field(default=None, alias="externalAddress", min_length=1)
     internal_address: str | None = Field(default=None, alias="internalAddress", min_length=1)
     service: ServiceSpec = Field(default_factory=ServiceSpec)
-    trunks: list[TrunkSpec] = Field(default_factory=list)
-    routes: list[RouteSpec] = Field(default_factory=list)
 
     _validate_address = field_validator("external_address")(validate_external_address)
     _validate_internal_address = field_validator("internal_address")(validate_external_address)
@@ -261,10 +285,4 @@ class SIPGatewaySpec(Model):
     def validate_service(self) -> "SIPGatewaySpec":
         if self.service.type == "NodePort":
             raise ValueError("SIPGateway supports only ClusterIP and LoadBalancer Services")
-        trunk_names = [trunk.name for trunk in self.trunks]
-        if len(trunk_names) != len(set(trunk_names)):
-            raise ValueError("trunk names must be unique")
-        known_trunks = set(trunk_names)
-        if any(route.target.trunk_ref not in known_trunks for route in self.routes if route.target.trunk_ref):
-            raise ValueError("route target references an unknown trunk")
         return self

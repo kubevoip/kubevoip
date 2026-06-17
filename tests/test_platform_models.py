@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from kubevoip.models import MediaRelaySpec, NetworkProfileSpec, RouteMatch, RouteTarget, SIPGatewaySpec
+from kubevoip.models import CallRouteSpec, MediaRelaySpec, NetworkProfileSpec, RouteMatch, RouteTarget, SIPGatewaySpec, SIPTrunkSpec
 
 
 def test_network_profile_validates_cidrs():
@@ -38,18 +38,105 @@ def test_route_target_requires_exactly_one_target():
         RouteTarget.model_validate({"sipUserRef": "daniel", "asteriskPoolRef": "apps", "extension": "600"})
 
 
-def test_gateway_routes_only_reference_declared_trunks():
-    base = {
-        "databaseSecretRef": {"name": "db"},
-        "networkProfileRef": {"name": "public"},
-        "mediaRelayRef": {"name": "home"},
-        "trunks": [{"name": "twilio", "terminationUri": "example.pstn.twilio.com"}],
-        "routes": [{"match": {"calledNumber": "+61..."}, "target": {"trunkRef": "twilio"}}],
-    }
-    assert SIPGatewaySpec.model_validate(base).routes[0].target.trunk_ref == "twilio"
-    base["routes"][0]["target"]["trunkRef"] = "missing"
+def test_gateway_rejects_nested_trunks_and_routes():
     with pytest.raises(ValidationError):
-        SIPGatewaySpec.model_validate(base)
+        SIPGatewaySpec.model_validate(
+            {
+                "databaseSecretRef": {"name": "db"},
+                "networkProfileRef": {"name": "public"},
+                "mediaRelayRef": {"name": "home"},
+                "trunks": [{"name": "provider-primary", "terminationUri": "provider.example.net"}],
+            }
+        )
+    with pytest.raises(ValidationError):
+        SIPGatewaySpec.model_validate(
+            {
+                "databaseSecretRef": {"name": "db"},
+                "networkProfileRef": {"name": "public"},
+                "mediaRelayRef": {"name": "home"},
+                "routes": [{"match": {"calledNumber": "+61..."}, "target": {"trunkRef": "provider-primary"}}],
+            }
+        )
+
+
+def test_sip_trunk_validates_provider_neutral_digest_auth():
+    spec = SIPTrunkSpec.model_validate(
+        {
+            "gatewayRef": {"name": "home"},
+            "terminationUri": "provider.example.net",
+            "inbound": {"allowedSourceCidrs": ["203.0.113.0/24"]},
+            "outbound": {
+                "callerIdSecretRef": {"name": "caller-id", "key": "value"},
+                "authentication": {
+                    "mode": "Digest",
+                    "digest": {
+                        "usernameSecretRef": {"name": "trunk-auth", "key": "username"},
+                        "passwordSecretRef": {"name": "trunk-auth", "key": "password"},
+                        "realm": "provider.example.net",
+                    },
+                },
+            },
+        }
+    )
+    assert spec.gateway_ref.name == "home"
+    assert spec.outbound.authentication.digest.username_secret_ref.key == "username"
+    with pytest.raises(ValidationError):
+        SIPTrunkSpec.model_validate(
+            {
+                "gatewayRef": {"name": "home"},
+                "terminationUri": "provider.example.net",
+                "inbound": {"allowedSourceCidrs": ["invalid"]},
+            }
+        )
+    with pytest.raises(ValidationError):
+        SIPTrunkSpec.model_validate(
+            {
+                "gatewayRef": {"name": "home"},
+                "terminationUri": "provider.example.net",
+                "outbound": {"authentication": {"mode": "Digest"}},
+            }
+        )
+
+
+def test_call_route_preserves_current_matching_and_targets():
+    route = CallRouteSpec.model_validate(
+        {
+            "gatewayRef": {"name": "home"},
+            "priority": 10,
+            "match": {"calledNumber": "+61..."},
+            "target": {"trunkRef": "provider-primary"},
+        }
+    )
+    assert route.match.called_number == "+61..."
+    assert route.target.trunk_ref == "provider-primary"
+    with pytest.raises(ValidationError):
+        CallRouteSpec.model_validate(
+            {
+                "gatewayRef": {"name": "home"},
+                "match": {"calledNumber": "600"},
+                "target": {"asteriskPoolRef": "applications"},
+            }
+        )
+
+
+def test_gateway_service_validation_remains_provider_neutral():
+    spec = SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+        }
+    )
+    assert spec.media_relay_ref.name == "home"
+    with pytest.raises(ValidationError):
+        SIPGatewaySpec.model_validate(
+            {
+                "databaseSecretRef": {"name": "db"},
+                "networkProfileRef": {"name": "public"},
+                "mediaRelayRef": {"name": "home"},
+                "service": {"type": "NodePort"},
+            }
+        )
 
 
 def test_addresses_and_routes_reject_configuration_injection():

@@ -39,13 +39,6 @@ spec:
               value: "{{ .Values.kamailioImage.repository }}:{{ .Values.kamailioImage.tag }}"
             - name: KUBEVOIP_RTPENGINE_IMAGE
               value: "{{ .Values.rtpengineImage.repository }}:{{ .Values.rtpengineImage.tag }}"
-            {{- if .Values.outboundCallerId.existingSecret }}
-            - name: KUBEVOIP_OUTBOUND_CALLER_ID
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.outboundCallerId.existingSecret | quote }}
-                  key: {{ .Values.outboundCallerId.key | quote }}
-            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       nodeSelector:

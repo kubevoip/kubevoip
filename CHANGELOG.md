@@ -2,6 +2,30 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.3.0] - 2026-06-17
+
+### Added
+
+- First-class `SIPTrunk` and `CallRoute` APIs for provider-neutral trunking and
+  ordered routing.
+- Secret-backed per-trunk caller ID and outbound digest authentication support
+  for provider challenge responses.
+- Manual v0.3 migration documentation for converting embedded gateway trunks
+  and routes into standalone resources.
+
+### Changed
+
+- `SIPGateway.spec.trunks` and `SIPGateway.spec.routes` were removed as an
+  intentional alpha API break. Gateways now reconcile same-namespace
+  `SIPTrunk` and `CallRoute` resources that reference them.
+- Primary docs and integration fixtures now use generic provider terminology
+  and example domains.
+
+### Removed
+
+- The global Helm outbound caller ID setting is no longer part of the
+  documented platform API.
+
 ## [0.2.7] - 2026-06-17
 
 ### Added

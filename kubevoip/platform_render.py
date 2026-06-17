@@ -2,9 +2,9 @@
 
 import hashlib
 import json
-import os
+import re
 
-from kubevoip.models import AsteriskPoolSpec, SIPGatewaySpec
+from kubevoip.models import AsteriskPoolSpec, CallRouteSpec, SIPGatewaySpec, SIPTrunkSpec
 
 
 def stable_hash(values: dict[str, str]) -> str:
@@ -47,6 +47,19 @@ exten => {spec.applications.echo_extension},1,Answer()
     }
 
 
+def trunk_env_name(trunk_name: str, key: str) -> str:
+    safe = re.sub(r"[^A-Z0-9]", "_", trunk_name.upper())
+    return f"KUBEVOIP_TRUNK_{safe}_{key}"
+
+
+def trunk_env_placeholder(trunk_name: str, key: str) -> str:
+    return f"__{trunk_env_name(trunk_name, key)}__"
+
+
+def kamailio_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def render_kamailio_config(
     spec: SIPGatewaySpec,
     gateway_name: str,
@@ -55,12 +68,15 @@ def render_kamailio_config(
     relay_endpoints: list[str],
     asterisk_targets: dict[str, str],
     sip_user_targets: dict[str, str],
+    trunks: dict[str, SIPTrunkSpec] | None = None,
+    routes: list[tuple[str, CallRouteSpec]] | None = None,
 ) -> str:
-    routes = []
-    trunks = {trunk.name: trunk for trunk in spec.trunks}
+    rendered_routes = []
+    failure_routes = []
+    trunks = trunks or {}
+    routes = routes or []
     external_record_route = external_address.replace('"', '\\"')
-    outbound_caller_id = os.getenv("KUBEVOIP_OUTBOUND_CALLER_ID", "").replace('"', '\\"')
-    for route in spec.routes:
+    for route_name, route in routes:
         number = route.match.called_number.replace('"', '\\"')
         condition = f'starts_with($rU, "{number[:-3]}")' if number.endswith("...") else f'$rU == "{number}"'
         if route.target.sip_user_ref:
@@ -70,16 +86,46 @@ def render_kamailio_config(
             target = asterisk_targets.get(route.target.asterisk_pool_ref or "", "")
             action = f'$du = "sip:{target}:5060"; route(RELAY); exit;'
         else:
-            target = trunks[route.target.trunk_ref or ""].termination_uri.replace('"', '\\"')
+            trunk_name = route.target.trunk_ref or ""
+            trunk = trunks[trunk_name]
+            target = trunk.termination_uri.replace('"', '\\"')
+            caller_id_placeholder = trunk_env_placeholder(trunk_name, "CALLER_ID")
             caller_id_action = (
-                f'uac_replace_from("{outbound_caller_id}", "sip:{outbound_caller_id}@{external_record_route}"); '
-                f'append_hf("P-Asserted-Identity: <sip:{outbound_caller_id}@{external_record_route}>\\r\\n"); '
-                if outbound_caller_id
+                f'uac_replace_from("{caller_id_placeholder}", "sip:{caller_id_placeholder}@{external_record_route}"); '
+                f'append_hf("P-Asserted-Identity: <sip:{caller_id_placeholder}@{external_record_route}>\\r\\n"); '
+                if trunk.outbound.caller_id_secret_ref
                 else ""
             )
-            action = f'remove_hf("Route"); {caller_id_action}$rd = "{target}"; $du = "sip:{target}"; route(RELAY); exit;'
-        routes.append(f"if ({condition}) {{ {action} }}")
-    trusted_sources = [f"src_ip == {network}" for trunk in spec.trunks for network in trunk.allowed_source_cidrs]
+            auth = trunk.outbound.authentication
+            if auth.mode == "Digest" and auth.digest:
+                route_id = re.sub(r"[^A-Za-z0-9_]", "_", f"{route_name}_{trunk_name}")
+                user_placeholder = trunk_env_placeholder(trunk_name, "AUTH_USERNAME")
+                password_placeholder = trunk_env_placeholder(trunk_name, "AUTH_PASSWORD")
+                realm_line = f'    $avp(arealm) = "{kamailio_string(auth.digest.realm)}";\n' if auth.digest.realm else ""
+                action = f'remove_hf("Route"); {caller_id_action}$rd = "{target}"; $du = "sip:{target}"; route(RELAY_TRUNK_{route_id}); exit;'
+                failure_routes.append(
+                    f"""failure_route[TRUNK_AUTH_{route_id}] {{
+  if (t_is_canceled()) {{ exit; }}
+  if (t_check_status("401|407")) {{
+    $avp(auser) = "{user_placeholder}";
+    $avp(apass) = "{password_placeholder}";
+{realm_line.rstrip()}
+    if (uac_auth()) {{ t_relay(); exit; }}
+  }}
+}}"""
+                )
+                failure_routes.append(
+                    f"""route[RELAY_TRUNK_{route_id}] {{
+  t_on_reply("MANAGE_REPLY");
+  t_on_failure("TRUNK_AUTH_{route_id}");
+  if (!t_relay()) {{ sl_reply_error(); }}
+  exit;
+}}"""
+                )
+            else:
+                action = f'remove_hf("Route"); {caller_id_action}$rd = "{target}"; $du = "sip:{target}"; route(RELAY); exit;'
+        rendered_routes.append(f"if ({condition}) {{ {action} }}")
+    trusted_sources = [f"src_ip == {network}" for trunk in trunks.values() for network in trunk.inbound.allowed_source_cidrs]
     trust_line = f"if ({' || '.join(trusted_sources)}) {{ setflag(1); }}" if trusted_sources else ""
     relay_sockets = " ".join(relay_endpoints)
     internal_record_route = internal_address.replace('"', '\\"')
@@ -112,12 +158,16 @@ loadmodule "auth_db.so"
 loadmodule "usrloc.so"
 loadmodule "registrar.so"
 loadmodule "uac.so"
+loadmodule "dialog.so"
 loadmodule "rtpengine.so"
 modparam("usrloc", "db_mode", 3)
 modparam("usrloc", "db_url", "__DBURL__")
 modparam("auth_db", "db_url", "__DBURL__")
 modparam("auth_db", "password_column", "ha1")
 modparam("auth_db", "calculate_ha1", 0)
+modparam("uac", "auth_username_avp", "$avp(auser)")
+modparam("uac", "auth_password_avp", "$avp(apass)")
+modparam("uac", "auth_realm_avp", "$avp(arealm)")
 modparam("rtpengine", "rtpengine_sock", RTPENGINE_SOCKETS)
 
 request_route {{
@@ -140,8 +190,8 @@ request_route {{
     consume_credentials();
   }}
   if (has_body("application/sdp")) {{ rtpengine_offer("replace-origin replace-session-connection"); }}
-  if (is_method("INVITE")) {{ {record_route_line} }}
-  {" ".join(routes)}
+  if (is_method("INVITE")) {{ dlg_manage(); {record_route_line} }}
+  {" ".join(rendered_routes)}
   if (!lookup("location")) {{ send_reply("404", "No route"); exit; }}
   route(RELAY);
 }}
@@ -155,4 +205,5 @@ route[RELAY] {{
 onreply_route[MANAGE_REPLY] {{
   if (has_body("application/sdp")) {{ rtpengine_answer("replace-origin replace-session-connection"); }}
 }}
+{" ".join(failure_routes)}
 """

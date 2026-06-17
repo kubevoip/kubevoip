@@ -9,9 +9,11 @@ from kubevoip.k8s import Kubernetes
 from kubevoip.platform_controller import (
     delete_sip_user_controller,
     reconcile_asterisk_pool,
+    reconcile_call_route_controller,
     reconcile_gateway,
     reconcile_media_relay,
     reconcile_network_profile,
+    reconcile_sip_trunk_controller,
     reconcile_sip_user_controller,
 )
 from kubevoip.status import error_status, platform_status
@@ -74,6 +76,8 @@ _handlers("networkprofiles", reconcile_network_profile)
 _handlers("mediarelays", reconcile_media_relay)
 _handlers("asteriskpools", reconcile_asterisk_pool)
 _handlers("sipgateways", reconcile_gateway)
+_handlers("siptrunks", reconcile_sip_trunk_controller)
+_handlers("callroutes", reconcile_call_route_controller)
 _handlers("sipusers", reconcile_sip_user_controller)
 
 

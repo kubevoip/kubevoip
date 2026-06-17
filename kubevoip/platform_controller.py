@@ -11,9 +11,11 @@ from kubevoip.database import database_ready, delete_sip_user, reconcile_sip_use
 from kubevoip.k8s import Kubernetes
 from kubevoip.models import (
     AsteriskPoolSpec,
+    CallRouteSpec,
     MediaRelaySpec,
     NetworkProfileSpec,
     SIPGatewaySpec,
+    SIPTrunkSpec,
     SIPUserSpec,
 )
 from kubevoip.platform_resources import (
@@ -200,9 +202,27 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
     if not relays:
         raise DependencyError("MediaRelay has no resolved relay endpoints")
     relay_endpoints = [f"udp:{item['service']}.{namespace}.svc.cluster.local:2223" for item in relays]
-    pool_names = {route.target.asterisk_pool_ref for route in spec.routes if route.target.asterisk_pool_ref}
+    trunk_items = kubernetes.list_custom(namespace, "siptrunks")
+    trunks = {
+        item["metadata"]["name"]: _model(SIPTrunkSpec, item["spec"])
+        for item in trunk_items
+        if item.get("spec", {}).get("gatewayRef", {}).get("name") == name
+    }
+    route_items = kubernetes.list_custom(namespace, "callroutes")
+    routes = sorted(
+        [
+            (item["metadata"]["name"], _model(CallRouteSpec, item["spec"]))
+            for item in route_items
+            if item.get("spec", {}).get("gatewayRef", {}).get("name") == name
+        ],
+        key=lambda item: (item[1].priority, item[0]),
+    )
+    known_trunks = set(trunks)
+    if any(route.target.trunk_ref not in known_trunks for _, route in routes if route.target.trunk_ref):
+        raise DependencyError("CallRoute references an unavailable SIPTrunk")
+    pool_names = {route.target.asterisk_pool_ref for _, route in routes if route.target.asterisk_pool_ref}
     asterisk_targets = {pool: f"{pool}-asterisk-pool.{namespace}.svc.cluster.local" for pool in pool_names}
-    user_names = {route.target.sip_user_ref for route in spec.routes if route.target.sip_user_ref}
+    user_names = {route.target.sip_user_ref for _, route in routes if route.target.sip_user_ref}
     sip_user_targets = {}
     for user_name in user_names:
         try:
@@ -215,7 +235,7 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
         database_ready(database)
     except Exception as error:
         raise DependencyError("gateway database is unavailable") from error
-    for resource in build_gateway_resources(name, namespace, body, spec, address, internal_address, relay_endpoints, asterisk_targets, sip_user_targets):
+    for resource in build_gateway_resources(name, namespace, body, spec, address, internal_address, relay_endpoints, asterisk_targets, sip_user_targets, trunks, routes):
         kubernetes.apply(resource)
     ready = kubernetes.ready_deployment_replicas(namespace, service_name)
     return platform_status(
@@ -229,9 +249,67 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
             ("ReferencesResolved", True, "Resolved", "Gateway references are resolved"),
             ("DatabaseReady", True, "Connected", "Gateway database is reachable"),
             ("ExternalAddressResolved", True, "Resolved", "Gateway external address is resolved"),
-            ("RoutesReady", True, "Validated", f"{len(spec.routes)} routes are configured"),
+            ("RoutesReady", True, "Validated", f"{len(routes)} routes are configured"),
             ("ConfigurationReady", True, "Rendered", "Kamailio configuration is rendered"),
             ("ReplicasReady", ready == spec.replicas, "Available" if ready == spec.replicas else "Reconciling", f"{ready}/{spec.replicas} Kamailio replicas are ready"),
+        ],
+    )
+
+
+def reconcile_sip_trunk_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
+    spec = _model(SIPTrunkSpec, raw_spec)
+    namespace = body["metadata"]["namespace"]
+    try:
+        kubernetes.read_custom(namespace, "sipgateways", spec.gateway_ref.name)
+        if spec.outbound.caller_id_secret_ref:
+            kubernetes.read_secret(namespace, spec.outbound.caller_id_secret_ref.name, spec.outbound.caller_id_secret_ref.key)
+        auth = spec.outbound.authentication
+        if auth.mode == "Digest" and auth.digest:
+            kubernetes.read_secret(namespace, auth.digest.username_secret_ref.name, auth.digest.username_secret_ref.key)
+            kubernetes.read_secret(namespace, auth.digest.password_secret_ref.name, auth.digest.password_secret_ref.key)
+    except (ApiException, KeyError, UnicodeDecodeError) as error:
+        raise DependencyError("SIP trunk dependencies are unavailable") from error
+    return platform_status(
+        body["metadata"].get("generation", 1),
+        True,
+        "TrunkReady",
+        "SIP trunk is configured",
+        {
+            "gateway": spec.gateway_ref.name,
+            "terminationUri": spec.termination_uri,
+            "authenticationMode": spec.outbound.authentication.mode,
+        },
+        body.get("status", {}).get("conditions"),
+        [
+            ("ReferencesResolved", True, "Resolved", "SIP trunk references are resolved"),
+            ("ConfigurationReady", True, "Validated", "SIP trunk configuration is valid"),
+        ],
+    )
+
+
+def reconcile_call_route_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
+    spec = _model(CallRouteSpec, raw_spec)
+    namespace = body["metadata"]["namespace"]
+    try:
+        kubernetes.read_custom(namespace, "sipgateways", spec.gateway_ref.name)
+        if spec.target.sip_user_ref:
+            kubernetes.read_custom(namespace, "sipusers", spec.target.sip_user_ref)
+        if spec.target.asterisk_pool_ref:
+            kubernetes.read_custom(namespace, "asteriskpools", spec.target.asterisk_pool_ref)
+        if spec.target.trunk_ref:
+            kubernetes.read_custom(namespace, "siptrunks", spec.target.trunk_ref)
+    except ApiException as error:
+        raise DependencyError("Call route dependencies are unavailable") from error
+    return platform_status(
+        body["metadata"].get("generation", 1),
+        True,
+        "RouteReady",
+        "Call route is configured",
+        {"gateway": spec.gateway_ref.name, "priority": spec.priority, "calledNumber": spec.match.called_number},
+        body.get("status", {}).get("conditions"),
+        [
+            ("ReferencesResolved", True, "Resolved", "Call route references are resolved"),
+            ("ConfigurationReady", True, "Validated", "Call route configuration is valid"),
         ],
     )
 

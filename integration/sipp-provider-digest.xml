@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<scenario name="KubeVoIP Generic Digest Provider">
+  <recv request="INVITE"/>
+  <send><![CDATA[
+    SIP/2.0 407 Proxy Authentication Required
+    [last_Via:]
+    [last_From:]
+    [last_To:];tag=provider-auth
+    [last_Call-ID:]
+    [last_CSeq:]
+    Proxy-Authenticate: Digest realm="provider.example.net", nonce="abcdef0123456789", algorithm=MD5, qop="auth"
+    Content-Length: 0
+  ]]></send>
+  <recv request="ACK" optional="true"/>
+  <recv request="INVITE"/>
+  <send><![CDATA[
+    SIP/2.0 200 OK
+    [last_Via:]
+    [last_From:]
+    [last_To:];tag=provider
+    [last_Call-ID:]
+    [last_CSeq:]
+    Contact: <sip:provider@provider-primary:5060>
+    [last_Record-Route:]
+    Content-Type: application/sdp
+    Content-Length: [len]
+
+    v=0
+    o=provider 1 1 IN IP[local_ip_type] [local_ip]
+    s=-
+    c=IN IP[media_ip_type] [media_ip]
+    t=0 0
+    m=audio [media_port] RTP/AVP 0
+    a=rtpmap:0 PCMU/8000
+  ]]></send>
+  <recv request="ACK"/>
+  <recv request="BYE"/>
+  <send><![CDATA[
+    SIP/2.0 200 OK
+    [last_Via:]
+    [last_From:]
+    [last_To:]
+    [last_Call-ID:]
+    [last_CSeq:]
+    Content-Length: 0
+  ]]></send>
+</scenario>

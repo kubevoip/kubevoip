@@ -126,6 +126,175 @@ spec:
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  name: siptrunks.kubevoip.com
+spec:
+  group: kubevoip.com
+  scope: Namespaced
+  names:
+    plural: siptrunks
+    singular: siptrunk
+    kind: SIPTrunk
+    shortNames:
+    - siptrunk
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              gatewayRef:
+                type: object
+                properties:
+                  name: &id001
+                    type: string
+                    minLength: 1
+                required:
+                - name
+              terminationUri: *id001
+              inbound:
+                type: object
+                properties:
+                  allowedSourceCidrs:
+                    type: array
+                    items:
+                      type: string
+              outbound:
+                type: object
+                properties:
+                  callerIdSecretRef: &id002
+                    type: object
+                    properties:
+                      name: *id001
+                      key: *id001
+                    required:
+                    - name
+                    - key
+                  authentication:
+                    type: object
+                    properties:
+                      mode:
+                        type: string
+                        enum:
+                        - None
+                        - Digest
+                        default: None
+                      digest:
+                        type: object
+                        properties:
+                          usernameSecretRef: *id002
+                          passwordSecretRef: *id002
+                          realm:
+                            type: string
+                            minLength: 1
+                            maxLength: 253
+                        required:
+                        - usernameSecretRef
+                        - passwordSecretRef
+                    x-kubernetes-validations:
+                    - rule: self.mode != 'Digest' || has(self.digest)
+                      message: Digest authentication requires digest settings
+                    - rule: self.mode != 'None' || !has(self.digest)
+                      message: digest settings require mode Digest
+            required:
+            - gatewayRef
+            - terminationUri
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: callroutes.kubevoip.com
+spec:
+  group: kubevoip.com
+  scope: Namespaced
+  names:
+    plural: callroutes
+    singular: callroute
+    kind: CallRoute
+    shortNames:
+    - callroute
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              gatewayRef:
+                type: object
+                properties:
+                  name: &id001
+                    type: string
+                    minLength: 1
+                required:
+                - name
+              priority:
+                type: integer
+                minimum: 0
+                maximum: 1000000
+                default: 1000
+              match:
+                type: object
+                properties:
+                  calledNumber:
+                    type: string
+                    pattern: ^[+0-9.*]+$
+                    maxLength: 64
+                required:
+                - calledNumber
+              target:
+                type: object
+                properties:
+                  sipUserRef: *id001
+                  asteriskPoolRef: *id001
+                  trunkRef: *id001
+                  extension:
+                    type: string
+                    pattern: ^[0-9]+$
+                x-kubernetes-validations:
+                - rule: '(has(self.sipUserRef) ? 1 : 0) + (has(self.asteriskPoolRef)
+                    ? 1 : 0) + (has(self.trunkRef) ? 1 : 0) == 1'
+                  message: exactly one route target is required
+                - rule: '!has(self.asteriskPoolRef) || has(self.extension)'
+                  message: Asterisk pool routes require extension
+            required:
+            - gatewayRef
+            - match
+            - target
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
   name: mediarelays.kubevoip.com
 spec:
   group: kubevoip.com
@@ -363,66 +532,6 @@ spec:
                     type: object
                     additionalProperties:
                       type: string
-              trunks:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-                      pattern: ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$
-                      maxLength: 40
-                    terminationUri: *id001
-                    authentication:
-                      type: object
-                      properties:
-                        mode:
-                          type: string
-                          enum:
-                          - IP
-                          default: IP
-                    allowedSourceCidrs:
-                      type: array
-                      items:
-                        type: string
-                  required:
-                  - name
-                  - terminationUri
-                x-kubernetes-list-type: map
-                x-kubernetes-list-map-keys:
-                - name
-              routes:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    match:
-                      type: object
-                      properties:
-                        calledNumber:
-                          type: string
-                          pattern: ^[+0-9.*]+$
-                          maxLength: 64
-                      required:
-                      - calledNumber
-                    target:
-                      type: object
-                      properties:
-                        sipUserRef: *id001
-                        asteriskPoolRef: *id001
-                        trunkRef: *id001
-                        extension:
-                          type: string
-                          pattern: ^[0-9]+$
-                      x-kubernetes-validations:
-                      - rule: '(has(self.sipUserRef) ? 1 : 0) + (has(self.asteriskPoolRef)
-                          ? 1 : 0) + (has(self.trunkRef) ? 1 : 0) == 1'
-                        message: exactly one route target is required
-                      - rule: '!has(self.asteriskPoolRef) || has(self.extension)'
-                        message: Asterisk pool routes require extension
-                  required:
-                  - match
-                  - target
             required:
             - databaseSecretRef
             - networkProfileRef

@@ -1,7 +1,8 @@
 import pytest
 
+from kubevoip import platform_controller
 from kubevoip.controller import WaitingForLoadBalancerError
-from kubevoip.platform_controller import reconcile_gateway, reconcile_media_relay
+from kubevoip.platform_controller import reconcile_call_route_controller, reconcile_gateway, reconcile_media_relay, reconcile_sip_trunk_controller
 
 PROFILE = {
     "apiVersion": "kubevoip.com/v1alpha1",
@@ -12,16 +13,32 @@ PROFILE = {
 
 
 class FakeKubernetes:
-    def __init__(self, ingresses=None):
+    def __init__(self, ingresses=None, custom=None, secrets=None):
         self.applied = []
         self.ingresses = ingresses or {}
+        self.custom = custom or {}
+        self.secrets = secrets or {}
 
     def apply(self, resource):
         self.applied.append(resource)
 
     def read_custom(self, namespace, plural, name):
-        assert (namespace, plural, name) == ("test", "networkprofiles", "public")
-        return PROFILE
+        if (namespace, plural, name) == ("test", "networkprofiles", "public"):
+            return PROFILE
+        return self.custom[(namespace, plural, name)]
+
+    def list_custom(self, namespace, plural):
+        return [
+            item
+            for (item_namespace, item_plural, _name), item in self.custom.items()
+            if item_namespace == namespace and item_plural == plural
+        ]
+
+    def read_secret(self, namespace, name, key):
+        return self.secrets[(namespace, name, key)]
+
+    def read_secret_values(self, namespace, name):
+        return self.secrets[(namespace, name)]
 
     def service_ingress(self, namespace, name):
         return self.ingresses.get(name)
@@ -110,3 +127,111 @@ def test_gateway_creates_load_balancer_service_before_waiting_for_ingress():
         "home-sip-gateway",
     ]
     assert api.applied[0]["kind"] == "Service"
+
+
+def test_gateway_uses_first_class_trunks_and_routes(monkeypatch):
+    monkeypatch.setattr(platform_controller, "database_ready", lambda _database: None)
+    custom = {
+        (
+            "test",
+            "mediarelays",
+            "home",
+        ): {"status": {"relays": [{"service": "home-rtpengine-0"}]}},
+        (
+            "test",
+            "siptrunks",
+            "provider-primary",
+        ): {
+            "metadata": {"name": "provider-primary"},
+            "spec": {
+                "gatewayRef": {"name": "home"},
+                "terminationUri": "provider.example.net",
+                "inbound": {"allowedSourceCidrs": ["203.0.113.0/24"]},
+            },
+        },
+        (
+            "test",
+            "callroutes",
+            "outbound-b",
+        ): {
+            "metadata": {"name": "outbound-b"},
+            "spec": {
+                "gatewayRef": {"name": "home"},
+                "priority": 20,
+                "match": {"calledNumber": "600"},
+                "target": {"asteriskPoolRef": "applications", "extension": "600"},
+            },
+        },
+        (
+            "test",
+            "callroutes",
+            "outbound-a",
+        ): {
+            "metadata": {"name": "outbound-a"},
+            "spec": {
+                "gatewayRef": {"name": "home"},
+                "priority": 10,
+                "match": {"calledNumber": "+..."},
+                "target": {"trunkRef": "provider-primary"},
+            },
+        },
+    }
+    api = FakeKubernetes(custom=custom, secrets={("test", "db"): {"host": "postgres", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"}})
+    body = {
+        "apiVersion": "kubevoip.com/v1alpha1",
+        "kind": "SIPGateway",
+        "metadata": {"name": "home", "namespace": "test", "uid": "uid"},
+    }
+    spec = {
+        "databaseSecretRef": {"name": "db"},
+        "networkProfileRef": {"name": "public"},
+        "mediaRelayRef": {"name": "home"},
+    }
+
+    status = reconcile_gateway(body, spec, api)
+
+    config = next(resource for resource in api.applied if resource["kind"] == "ConfigMap")["data"]["kamailio.cfg"]
+    routes_condition = next(condition for condition in status["conditions"] if condition["type"] == "RoutesReady")
+    assert status["phase"] == "Ready"
+    assert routes_condition["message"] == "2 routes are configured"
+    assert config.index('starts_with($rU, "+")') < config.index('$rU == "600"')
+    assert 'provider.example.net' in config
+
+
+def test_sip_trunk_and_call_route_statuses_validate_references():
+    custom = {
+        ("test", "sipgateways", "home"): {"spec": {}},
+        ("test", "sipusers", "daniel"): {"spec": {}},
+        ("test", "siptrunks", "provider-primary"): {"spec": {}},
+    }
+    secrets = {
+        ("test", "caller-id", "value"): "+15551234567",
+        ("test", "provider-auth", "username"): "user",
+        ("test", "provider-auth", "password"): "password",
+    }
+    api = FakeKubernetes(custom=custom, secrets=secrets)
+    trunk_status = reconcile_sip_trunk_controller(
+        {"metadata": {"name": "provider-primary", "namespace": "test", "generation": 1}},
+        {
+            "gatewayRef": {"name": "home"},
+            "terminationUri": "provider.example.net",
+            "outbound": {
+                "callerIdSecretRef": {"name": "caller-id", "key": "value"},
+                "authentication": {
+                    "mode": "Digest",
+                    "digest": {
+                        "usernameSecretRef": {"name": "provider-auth", "key": "username"},
+                        "passwordSecretRef": {"name": "provider-auth", "key": "password"},
+                    },
+                },
+            },
+        },
+        api,
+    )
+    route_status = reconcile_call_route_controller(
+        {"metadata": {"name": "inbound", "namespace": "test", "generation": 1}},
+        {"gatewayRef": {"name": "home"}, "match": {"calledNumber": "100"}, "target": {"sipUserRef": "daniel"}},
+        api,
+    )
+    assert trunk_status["phase"] == "Ready"
+    assert route_status["phase"] == "Ready"

@@ -8,7 +8,15 @@ set -eu
 dburl="$(python3 -c 'import os, urllib.parse
 quote = lambda key: urllib.parse.quote(os.environ[key], safe="")
 print("postgres://{}:{}@{}:{}/{}".format(*(quote(key) for key in ("user", "password", "host", "port", "dbname"))))')"
-DBURL="$dburl" python3 -c 'import os, pathlib
+DBURL="$dburl" python3 -c 'import os, pathlib, re
 source = pathlib.Path("/etc/kamailio/kamailio.cfg").read_text()
-pathlib.Path("/work/kamailio.cfg").write_text(source.replace("__DBURL__", os.environ["DBURL"]))'
+source = source.replace("__DBURL__", os.environ["DBURL"])
+for key, value in os.environ.items():
+    if key.startswith("KUBEVOIP_TRUNK_"):
+        escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+        source = source.replace(f"__{key}__", escaped)
+missing = sorted(set(re.findall(r"__KUBEVOIP_TRUNK_[A-Z0-9_]+__", source)))
+if missing:
+    raise SystemExit("missing trunk environment variables: " + ", ".join(missing))
+pathlib.Path("/work/kamailio.cfg").write_text(source)'
 exec kamailio -DD -E -f /work/kamailio.cfg

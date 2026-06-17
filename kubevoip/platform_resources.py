@@ -3,8 +3,8 @@
 import base64
 from typing import Any
 
-from kubevoip.models import AsteriskPoolSpec, MediaRelaySpec, SIPGatewaySpec
-from kubevoip.platform_render import render_kamailio_config, render_worker_configs, stable_hash
+from kubevoip.models import AsteriskPoolSpec, CallRouteSpec, MediaRelaySpec, SIPGatewaySpec, SIPTrunkSpec
+from kubevoip.platform_render import render_kamailio_config, render_worker_configs, stable_hash, trunk_env_name
 from kubevoip.resources import metadata
 
 
@@ -242,14 +242,56 @@ def build_gateway_resources(
     relay_endpoints: list[str],
     asterisk_targets: dict[str, str],
     sip_user_targets: dict[str, str],
+    trunks: dict[str, SIPTrunkSpec],
+    routes: list[tuple[str, CallRouteSpec]],
 ) -> list[dict[str, Any]]:
     base = f"{name}-sip-gateway"
     labels = component_labels("kamailio", name)
     common = {"namespace": namespace, "instance": name, "owner": owner}
-    config = render_kamailio_config(spec, name, external_address, internal_address, relay_endpoints, asterisk_targets, sip_user_targets)
+    config = render_kamailio_config(spec, name, external_address, internal_address, relay_endpoints, asterisk_targets, sip_user_targets, trunks, routes)
     checksum = stable_hash({"kamailio.cfg": config})
     configmap = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": metadata(f"{base}-config", **common), "data": {"kamailio.cfg": config}}
     service = build_gateway_service(name, namespace, owner, spec)
+    env = [{"secretRef": {"name": spec.database_secret_ref.name}}]
+    secret_env = []
+    for trunk_name, trunk in sorted(trunks.items()):
+        if trunk.outbound.caller_id_secret_ref:
+            secret_env.append(
+                {
+                    "name": trunk_env_name(trunk_name, "CALLER_ID"),
+                    "valueFrom": {
+                        "secretKeyRef": {
+                            "name": trunk.outbound.caller_id_secret_ref.name,
+                            "key": trunk.outbound.caller_id_secret_ref.key,
+                        }
+                    },
+                }
+            )
+        auth = trunk.outbound.authentication
+        if auth.mode == "Digest" and auth.digest:
+            secret_env.extend(
+                [
+                    {
+                        "name": trunk_env_name(trunk_name, "AUTH_USERNAME"),
+                        "valueFrom": {
+                            "secretKeyRef": {
+                                "name": auth.digest.username_secret_ref.name,
+                                "key": auth.digest.username_secret_ref.key,
+                            }
+                        },
+                    },
+                    {
+                        "name": trunk_env_name(trunk_name, "AUTH_PASSWORD"),
+                        "valueFrom": {
+                            "secretKeyRef": {
+                                "name": auth.digest.password_secret_ref.name,
+                                "key": auth.digest.password_secret_ref.key,
+                            }
+                        },
+                    },
+                ]
+            )
+            secret_env.append({"name": trunk_env_name(trunk_name, "AUTH_REALM"), "value": auth.digest.realm or ""})
     deployment = {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -264,7 +306,8 @@ def build_gateway_resources(
                         {
                             "name": "kamailio",
                             "image": spec.image,
-                            "envFrom": [{"secretRef": {"name": spec.database_secret_ref.name}}],
+                            "envFrom": env,
+                            "env": secret_env,
                             "volumeMounts": [{"name": "config", "mountPath": "/etc/kamailio/kamailio.cfg", "subPath": "kamailio.cfg"}],
                             "readinessProbe": {"exec": {"command": ["sh", "-c", "pgrep kamailio >/dev/null"]}, "periodSeconds": 10},
                         }

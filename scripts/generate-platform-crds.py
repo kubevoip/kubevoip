@@ -36,6 +36,29 @@ name = string(minLength=1)
 address = string(minLength=1, maxLength=253)
 local_ref = obj({"name": name}, ("name",))
 secret_key_ref = obj({"name": name, "key": name}, ("name", "key"))
+route_target = obj(
+    {
+        "sipUserRef": name,
+        "asteriskPoolRef": name,
+        "trunkRef": name,
+        "extension": string(pattern=r"^[0-9]+$"),
+    }
+) | {
+    "x-kubernetes-validations": [
+        {
+            "rule": "(has(self.sipUserRef) ? 1 : 0) + (has(self.asteriskPoolRef) ? 1 : 0) + (has(self.trunkRef) ? 1 : 0) == 1",
+            "message": "exactly one route target is required",
+        },
+        {
+            "rule": "!has(self.asteriskPoolRef) || has(self.extension)",
+            "message": "Asterisk pool routes require extension",
+        },
+    ]
+}
+route_match = obj(
+    {"calledNumber": string(pattern=r"^[+0-9.*]+$", maxLength=64)},
+    ("calledNumber",),
+)
 service = obj(
     {
         "type": string(enum=["ClusterIP", "LoadBalancer"], default="ClusterIP"),
@@ -69,6 +92,47 @@ SPECS = {
             "passwordSecretRef": secret_key_ref,
         },
         ("gatewayRef", "extension", "authUsername", "passwordSecretRef"),
+    ),
+    "SIPTrunk": obj(
+        {
+            "gatewayRef": local_ref,
+            "terminationUri": name,
+            "inbound": obj({"allowedSourceCidrs": array(string())}),
+            "outbound": obj(
+                {
+                    "callerIdSecretRef": secret_key_ref,
+                    "authentication": obj(
+                        {
+                            "mode": string(enum=["None", "Digest"], default="None"),
+                            "digest": obj(
+                                {
+                                    "usernameSecretRef": secret_key_ref,
+                                    "passwordSecretRef": secret_key_ref,
+                                    "realm": string(minLength=1, maxLength=253),
+                                },
+                                ("usernameSecretRef", "passwordSecretRef"),
+                            ),
+                        }
+                    )
+                    | {
+                        "x-kubernetes-validations": [
+                            {"rule": "self.mode != 'Digest' || has(self.digest)", "message": "Digest authentication requires digest settings"},
+                            {"rule": "self.mode != 'None' || !has(self.digest)", "message": "digest settings require mode Digest"},
+                        ]
+                    },
+                }
+            ),
+        },
+        ("gatewayRef", "terminationUri"),
+    ),
+    "CallRoute": obj(
+        {
+            "gatewayRef": local_ref,
+            "priority": integer(minimum=0, maximum=1000000, default=1000),
+            "match": route_match,
+            "target": route_target,
+        },
+        ("gatewayRef", "match", "target"),
     ),
     "MediaRelay": obj(
         {
@@ -127,51 +191,6 @@ SPECS = {
             "externalAddress": address,
             "internalAddress": address,
             "service": service,
-            "trunks": array(
-                obj(
-                    {
-                        "name": string(pattern=r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", maxLength=40),
-                        "terminationUri": name,
-                        "authentication": obj(
-                            {"mode": string(enum=["IP"], default="IP")},
-                        ),
-                        "allowedSourceCidrs": array(string()),
-                    },
-                    ("name", "terminationUri"),
-                ),
-                **{"x-kubernetes-list-type": "map", "x-kubernetes-list-map-keys": ["name"]},
-            ),
-            "routes": array(
-                obj(
-                    {
-                        "match": obj(
-                            {"calledNumber": string(pattern=r"^[+0-9.*]+$", maxLength=64)},
-                            ("calledNumber",),
-                        ),
-                        "target": obj(
-                            {
-                                "sipUserRef": name,
-                                "asteriskPoolRef": name,
-                                "trunkRef": name,
-                                "extension": string(pattern=r"^[0-9]+$"),
-                            }
-                        )
-                        | {
-                            "x-kubernetes-validations": [
-                                {
-                                    "rule": "(has(self.sipUserRef) ? 1 : 0) + (has(self.asteriskPoolRef) ? 1 : 0) + (has(self.trunkRef) ? 1 : 0) == 1",
-                                    "message": "exactly one route target is required",
-                                },
-                                {
-                                    "rule": "!has(self.asteriskPoolRef) || has(self.extension)",
-                                    "message": "Asterisk pool routes require extension",
-                                },
-                            ]
-                        },
-                    },
-                    ("match", "target"),
-                )
-            ),
         },
         ("databaseSecretRef", "networkProfileRef", "mediaRelayRef"),
     ),
@@ -180,6 +199,8 @@ SPECS = {
 PLURALS = {
     "NetworkProfile": ("networkprofiles", "networkprofile", ["netprofile"]),
     "SIPUser": ("sipusers", "sipuser", ["sipuser"]),
+    "SIPTrunk": ("siptrunks", "siptrunk", ["siptrunk"]),
+    "CallRoute": ("callroutes", "callroute", ["callroute"]),
     "MediaRelay": ("mediarelays", "mediarelay", ["relay"]),
     "AsteriskPool": ("asteriskpools", "asteriskpool", ["astpool"]),
     "SIPGateway": ("sipgateways", "sipgateway", ["sipgw"]),

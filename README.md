@@ -3,9 +3,10 @@
 [![Test](https://github.com/danohn/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/test.yaml)
 [![Integration](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml)
 
-KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.2 introduces
-experimental Kamailio gateways, RTPengine media relays, PostgreSQL-backed SIP
-users, and interchangeable Asterisk application workers. The original
+KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.3 provides
+provider-neutral Kamailio gateways, first-class SIP trunks and call routes,
+RTPengine media relays, PostgreSQL-backed SIP users, and interchangeable
+Asterisk application workers. The original
 single-instance `Asterisk` API remains available under the new API group.
 
 Project home: [https://kubevoip.com](https://kubevoip.com)
@@ -14,13 +15,17 @@ Project home: [https://kubevoip.com](https://kubevoip.com)
 
 ```bash
 helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.2.7 \
+  --version 0.3.0 \
   --namespace telephony --create-namespace
 ```
 
-KubeVoIP v0.2 installs only `kubevoip.com/v1alpha1` CRDs. Existing v0.1
+KubeVoIP v0.3 installs only `kubevoip.com/v1alpha1` CRDs. Existing v0.1
 `kubevoip.io` resources must be exported and recreated; see
 [docs/migration-v0.2.md](docs/migration-v0.2.md).
+
+KubeVoIP v0.3 removes nested `SIPGateway` trunks and routes. See
+[docs/migration-v0.3.md](docs/migration-v0.3.md) for the manual conversion to
+`SIPTrunk` and `CallRoute`.
 
 Each Helm release watches and manages only its installation namespace. Its
 ServiceAccount receives a namespaced Role, including Secret access only in that
@@ -28,9 +33,9 @@ namespace. Install a separate release for each telephony namespace:
 
 ```bash
 helm install kubevoip-home oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.2.7 --namespace telephony-home --create-namespace
+  --version 0.3.0 --namespace telephony-home --create-namespace
 helm install kubevoip-office oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.2.7 --namespace telephony-office --create-namespace
+  --version 0.3.0 --namespace telephony-office --create-namespace
 ```
 
 CRDs remain cluster-scoped Kubernetes resources shared by all releases.
@@ -40,11 +45,13 @@ CRDs remain cluster-scoped Kubernetes resources shared by all releases.
 - `Asterisk`: the v0.1 single-PBX model, moved unchanged to `kubevoip.com`.
 - `NetworkProfile`: shared external addressing and local-network policy.
 - `SIPUser`: a PostgreSQL-backed identity registered through Kamailio.
+- `SIPTrunk`: provider-neutral inbound and outbound trunk policy.
+- `CallRoute`: ordered call routing to users, trunks, or Asterisk workers.
 - `MediaRelay`: stable, horizontally scalable RTPengine replicas.
 - `AsteriskPool`: private application workers, currently providing Echo.
-- `SIPGateway`: Kamailio registration, media-relay, trunk, and route policy.
+- `SIPGateway`: Kamailio registration and media-relay edge policy.
 
-Platform resources are experimental in v0.2. References are namespaced and
+Platform resources are experimental in v0.3. References are namespaced and
 must point to resources in the same namespace.
 
 ```bash
@@ -72,13 +79,14 @@ configuration remain the user's responsibility.
 
 `Service` and `HostNetwork` media modes are experimental. UDP SIP is the only
 supported transport. TLS, WebRTC, and active-call failover are not included in
-v0.2. A namespace and its dedicated operator release form the supported
+v0.3. A namespace and its dedicated operator release form the supported
 isolation boundary.
 
-IP-authenticated trunks must declare `allowedSourceCidrs`. Calls arriving from
-those networks bypass subscriber authentication. Other INVITEs must
-authenticate as a `SIPUser`. Routes can target a `sipUserRef`,
-`asteriskPoolRef`, or declared `trunkRef`.
+IP-authenticated inbound trunks declare `SIPTrunk.spec.inbound.allowedSourceCidrs`.
+Calls arriving from those networks bypass subscriber authentication. Other
+INVITEs must authenticate as a `SIPUser`. `CallRoute` resources can target a
+`sipUserRef`, `asteriskPoolRef`, or `trunkRef`. Outbound trunks can present
+caller ID and answer provider digest challenges from Secret-backed settings.
 
 See [docs/networking.md](docs/networking.md) for precedence and packet-flow
 details.
@@ -108,7 +116,7 @@ uv run kopf run kubevoip/main.py --namespace telephony --verbose
 
 Releases publish multi-architecture operator, Asterisk, Asterisk-worker,
 Kamailio, and RTPengine images plus the OCI Helm chart. Asterisk 22 LTS,
-Kamailio 5.6.3, and RTPengine 10.5.3.5 are pinned for v0.2.
+Kamailio 5.6.3, and RTPengine 10.5.3.5 are pinned for v0.3.
 
 Helm intentionally leaves CRDs installed on uninstall. Remove the old
 `asterisks.kubevoip.io` CRD only after migration has been verified.

@@ -28,9 +28,15 @@ asks an RTPengine replica to rewrite SDP. Direct trunk-to-phone media flows
 through RTPengine without Asterisk. Calls to an `AsteriskPool` application flow
 through RTPengine and one selected Asterisk worker.
 
-IP-authenticated trunks trust only their configured `allowedSourceCidrs`.
+IP-authenticated trunks trust only `SIPTrunk.spec.inbound.allowedSourceCidrs`.
 Untrusted INVITEs receive a proxy-authentication challenge and must authenticate
-as a `SIPUser`. Outbound routes select a declared trunk with `trunkRef`.
+as a `SIPUser`. Outbound `CallRoute` resources select a declared trunk with
+`trunkRef`.
+
+Outbound trunks can optionally use Secret-backed caller ID and SIP digest
+credentials. KubeVoIP injects those values into Kamailio as environment
+variables and keeps raw credential values out of rendered ConfigMaps, statuses,
+Events, and logs.
 
 Public forwarding must preserve port numbers. Forward UDP `5060` to the
 Kamailio address and each RTPengine replica's assigned range to that replica's

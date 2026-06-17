@@ -19,6 +19,25 @@ stringData:
 apiVersion: v1
 kind: Secret
 metadata:
+  name: provider-caller-id
+  namespace: kubevoip-platform
+type: Opaque
+stringData:
+  value: "+15551234567"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: provider-auth
+  namespace: kubevoip-platform
+type: Opaque
+stringData:
+  username: provider-user
+  password: provider-password
+---
+apiVersion: v1
+kind: Secret
+metadata:
   name: daniel-sip
   namespace: kubevoip-platform
 type: Opaque
@@ -111,25 +130,73 @@ spec:
     name: public
   mediaRelayRef:
     name: home
-  trunks:
-    - name: integration-trunk
-      terminationUri: integration-trunk
-      authentication:
-        mode: IP
-  routes:
-    - match:
-        calledNumber: "100"
-      target:
-        sipUserRef: daniel
-    - match:
-        calledNumber: "600"
-      target:
-        asteriskPoolRef: applications
-        extension: "600"
-    - match:
-        calledNumber: "+61..."
-      target:
-        trunkRef: integration-trunk
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: SIPTrunk
+metadata:
+  name: provider-primary
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+  terminationUri: provider-primary
+  outbound:
+    callerIdSecretRef:
+      name: provider-caller-id
+      key: value
+    authentication:
+      mode: Digest
+      digest:
+        usernameSecretRef:
+          name: provider-auth
+          key: username
+        passwordSecretRef:
+          name: provider-auth
+          key: password
+        realm: provider.example.net
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: CallRoute
+metadata:
+  name: user-100
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+  priority: 100
+  match:
+    calledNumber: "100"
+  target:
+    sipUserRef: daniel
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: CallRoute
+metadata:
+  name: echo
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+  priority: 200
+  match:
+    calledNumber: "600"
+  target:
+    asteriskPoolRef: applications
+    extension: "600"
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: CallRoute
+metadata:
+  name: outbound-provider
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+  priority: 300
+  match:
+    calledNumber: "+61..."
+  target:
+    trunkRef: provider-primary
 ---
 apiVersion: kubevoip.com/v1alpha1
 kind: SIPUser

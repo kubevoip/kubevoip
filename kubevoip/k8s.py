@@ -38,6 +38,11 @@ class Kubernetes:
             "kubevoip.com", "v1alpha1", namespace, plural, name
         )
 
+    def list_custom(self, namespace: str, plural: str) -> list[dict[str, Any]]:
+        return self.custom.list_namespaced_custom_object(
+            "kubevoip.com", "v1alpha1", namespace, plural
+        ).get("items", [])
+
     def service_ingress(self, namespace: str, name: str) -> str | None:
         try:
             service = self.core.read_namespaced_service(name, namespace)

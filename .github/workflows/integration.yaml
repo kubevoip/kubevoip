@@ -84,7 +84,10 @@ jobs:
           test "$(kubectl auth can-i list secrets \
             --as=system:serviceaccount:asterisk-demo:kubevoip-kubevoip \
             --all-namespaces)" = "no"
-          ! kubectl get clusterrole -o name | grep kubevoip
+          if kubectl get clusterrole -o yaml | grep -A20 'name: kubevoip' | grep -q 'secrets'; then
+            echo "KubeVoIP ClusterRoles must not grant Secret access"
+            exit 1
+          fi
           kubectl -n asterisk-demo delete secret isolation-check
       - run: kubectl apply -f examples/secret-alice-sip.yaml -f examples/asterisk-demo.yaml
       - run: |
@@ -129,15 +132,16 @@ jobs:
             sleep 5
           done
           test "$(kubectl -n kubevoip-platform get sipuser daniel -o jsonpath='{.status.phase}')" = "Ready"
-          ! kubectl -n kubevoip-platform get configmaps -o yaml | grep -E 'integration-password|phone-password'
-          ! kubectl -n kubevoip-platform get networkprofile,sipuser,mediarelay,asteriskpool,sipgateway -o yaml | grep -E 'integration-password|phone-password'
-          ! kubectl -n kubevoip-platform logs deployment/kubevoip-kubevoip | grep -E 'integration-password|phone-password'
+          ! kubectl -n kubevoip-platform get configmaps -o yaml | grep -E 'integration-password|phone-password|provider-password|provider-user'
+          ! kubectl -n kubevoip-platform get networkprofile,sipuser,siptrunk,callroute,mediarelay,asteriskpool,sipgateway -o yaml | grep -E 'integration-password|phone-password|provider-password|provider-user'
+          ! kubectl -n kubevoip-platform logs deployment/kubevoip-kubevoip | grep -E 'integration-password|phone-password|provider-password|provider-user'
       - name: Register SIP user and complete platform Echo call
         run: |
           kubectl -n kubevoip-platform create configmap sipp-platform-scenarios \
             --from-file=integration/sipp-register.xml --from-file=integration/sipp-platform-echo.xml \
             --from-file=integration/sipp-phone.xml --from-file=integration/sipp-register-phone.xml \
-            --from-file=integration/sipp-trunk-call.xml
+            --from-file=integration/sipp-trunk-call.xml --from-file=integration/sipp-provider-digest.xml \
+            --from-file=integration/sipp-outbound-provider-call.xml
           kubectl -n kubevoip-platform run sipp-register --restart=Never --image=kubevoip-sipp:test \
             --overrides='{"spec":{"containers":[{"name":"sipp-register","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-register.xml","-s","daniel","home-sip-gateway","-m","1","-timeout","20s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
           kubectl -n kubevoip-platform wait --for=jsonpath='{.status.phase}'=Succeeded pod/sipp-register --timeout=60s
@@ -152,13 +156,13 @@ jobs:
           kubectl -n kubevoip-platform run sipp-register-phone --restart=Never --image=kubevoip-sipp:test \
             --overrides='{"spec":{"containers":[{"name":"sipp-register-phone","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-register-phone.xml","-s","daniel","home-sip-gateway","-m","1","-timeout","30s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
           kubectl -n kubevoip-platform wait --for=jsonpath='{.status.phase}'=Succeeded pod/sipp-register-phone --timeout=60s
-          kubectl -n kubevoip-platform run integration-trunk --restart=Never --image=kubevoip-sipp:test \
-            --overrides='{"spec":{"containers":[{"name":"integration-trunk","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","command":["sleep","300"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
-          kubectl -n kubevoip-platform wait --for=condition=Ready pod/integration-trunk --timeout=60s
-          trunk_ip="$(kubectl -n kubevoip-platform get pod integration-trunk -o jsonpath='{.status.podIP}')"
+          kubectl -n kubevoip-platform run provider-primary --restart=Never --image=kubevoip-sipp:test \
+            --overrides='{"spec":{"containers":[{"name":"provider-primary","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","command":["sleep","300"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
+          kubectl -n kubevoip-platform wait --for=condition=Ready pod/provider-primary --timeout=60s
+          trunk_ip="$(kubectl -n kubevoip-platform get pod provider-primary -o jsonpath='{.status.podIP}')"
           before="$(kubectl -n kubevoip-platform get deployment home-sip-gateway -o jsonpath='{.spec.template.metadata.annotations.kubevoip\.com/config-hash}')"
-          kubectl -n kubevoip-platform patch sipgateway home --type=merge \
-            -p "{\"spec\":{\"trunks\":[{\"name\":\"integration-trunk\",\"terminationUri\":\"integration-trunk\",\"authentication\":{\"mode\":\"IP\"},\"allowedSourceCidrs\":[\"${trunk_ip}/32\"]}]}}"
+          kubectl -n kubevoip-platform patch siptrunk provider-primary --type=merge \
+            -p "{\"spec\":{\"inbound\":{\"allowedSourceCidrs\":[\"${trunk_ip}/32\"]}}}"
           for attempt in $(seq 1 18); do
             after="$(kubectl -n kubevoip-platform get deployment home-sip-gateway -o jsonpath='{.spec.template.metadata.annotations.kubevoip\.com/config-hash}')"
             test "$before" != "$after" && break
@@ -166,9 +170,20 @@ jobs:
           done
           test "$before" != "$after"
           kubectl -n kubevoip-platform rollout status deployment/home-sip-gateway --timeout=180s
-          kubectl -n kubevoip-platform exec integration-trunk -- \
+          kubectl -n kubevoip-platform exec provider-primary -- \
             sipp -sf /scenario/sipp-trunk-call.xml -s 100 home-sip-gateway -m 1 -timeout 30s
-          kubectl -n kubevoip-platform delete pod/sipp-phone service/sipp-phone pod/integration-trunk --ignore-not-found
+          kubectl -n kubevoip-platform delete pod/sipp-phone service/sipp-phone pod/provider-primary --ignore-not-found
+      - name: Complete outbound digest-authenticated provider call
+        run: |
+          kubectl -n kubevoip-platform run provider-primary --restart=Never --image=kubevoip-sipp:test \
+            --overrides='{"spec":{"containers":[{"name":"provider-primary","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-provider-digest.xml","-i","0.0.0.0","-p","5060","-m","1","-timeout","240s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
+          kubectl -n kubevoip-platform expose pod provider-primary --port=5060 --protocol=UDP
+          kubectl -n kubevoip-platform wait --for=condition=Ready pod/provider-primary --timeout=60s
+          kubectl -n kubevoip-platform run sipp-outbound-provider --restart=Never --image=kubevoip-sipp:test \
+            --overrides='{"spec":{"containers":[{"name":"sipp","image":"kubevoip-sipp:test","imagePullPolicy":"IfNotPresent","args":["-sf","/scenario/sipp-outbound-provider-call.xml","-s","+61200000000","home-sip-gateway","-m","1","-timeout","60s"],"volumeMounts":[{"name":"scenario","mountPath":"/scenario"}]}],"volumes":[{"name":"scenario","configMap":{"name":"sipp-platform-scenarios"}}]}}'
+          kubectl -n kubevoip-platform wait --for=jsonpath='{.status.phase}'=Succeeded pod/sipp-outbound-provider --timeout=120s
+          kubectl -n kubevoip-platform wait --for=jsonpath='{.status.phase}'=Succeeded pod/provider-primary --timeout=120s
+          kubectl -n kubevoip-platform delete pod/provider-primary service/provider-primary pod/sipp-outbound-provider --ignore-not-found
       - name: Verify new calls survive replica replacement
         run: |
           kamailio_pod="$(kubectl -n kubevoip-platform get pod -l app.kubernetes.io/name=kamailio -o jsonpath='{.items[0].metadata.name}')"
@@ -206,6 +221,7 @@ jobs:
         run: |
           kubectl -n kubevoip-platform delete sipuser daniel --wait=true
           test "$(kubectl -n kubevoip-platform exec deployment/postgres -- psql -U kubevoip -d kubevoip -Atc 'select count(*) from subscriber;')" = "0"
+          kubectl -n kubevoip-platform delete callroute/user-100 callroute/echo callroute/outbound-provider siptrunk/provider-primary --wait=true
           kubectl -n kubevoip-platform delete sipgateway/home mediarelay/home asteriskpool/applications --wait=true
           for attempt in $(seq 1 30); do
             count="$(kubectl -n kubevoip-platform get secret,configmap,service,deployment,statefulset \
@@ -220,7 +236,7 @@ jobs:
           kubectl -n asterisk-demo get ast,pods,services -o wide || true
           kubectl -n asterisk-demo logs statefulset/demo-asterisk || true
           kubectl -n asterisk-demo logs deployment/kubevoip-kubevoip || true
-          kubectl -n kubevoip-platform get networkprofile,sipuser,mediarelay,asteriskpool,sipgateway,pods,services -o wide || true
+          kubectl -n kubevoip-platform get networkprofile,sipuser,siptrunk,callroute,mediarelay,asteriskpool,sipgateway,pods,services -o wide || true
           kubectl -n kubevoip-platform get endpoints,endpointslices -o wide || true
           kubectl -n kubevoip-platform describe pod/sipp-after-asterisk-replacement || true
           kubectl -n kubevoip-platform logs pod/sipp-after-asterisk-replacement || true

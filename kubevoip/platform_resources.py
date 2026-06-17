@@ -17,6 +17,28 @@ def component_labels(component: str, name: str) -> dict[str, str]:
     }
 
 
+def preferred_component_anti_affinity(component: str) -> dict[str, Any]:
+    return {
+        "podAntiAffinity": {
+            "preferredDuringSchedulingIgnoredDuringExecution": [
+                {
+                    "weight": 100,
+                    "podAffinityTerm": {
+                        "topologyKey": "kubernetes.io/hostname",
+                        "labelSelector": {
+                            "matchLabels": {
+                                "app.kubernetes.io/name": component,
+                                "app.kubernetes.io/managed-by": "kubevoip",
+                                "app.kubernetes.io/part-of": "kubevoip",
+                            }
+                        },
+                    },
+                }
+            ]
+        }
+    }
+
+
 def partition_range(start: int, end: int, replicas: int) -> list[tuple[int, int]]:
     size, remainder = divmod(end - start + 1, replicas)
     result = []
@@ -99,6 +121,7 @@ exec rtpengine --foreground --log-stderr --table=-1 \
                 "template": {
                     "metadata": {"labels": labels, "annotations": {"kubevoip.com/external-address": address}},
                     "spec": {
+                        "affinity": preferred_component_anti_affinity("rtpengine"),
                         "hostNetwork": spec.network.mode == "HostNetwork",
                         "dnsPolicy": "ClusterFirstWithHostNet" if spec.network.mode == "HostNetwork" else "ClusterFirst",
                         "containers": [

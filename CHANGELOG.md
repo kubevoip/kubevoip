@@ -2,6 +2,13 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.2.7] - 2026-06-17
+
+### Added
+
+- RTPengine Deployments now use preferred pod anti-affinity so relay replicas
+  are spread across Kubernetes nodes when capacity allows.
+
 ## [0.2.6] - 2026-06-16
 
 ### Fixed

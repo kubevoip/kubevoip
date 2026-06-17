@@ -48,6 +48,33 @@ def test_media_relay_builds_stable_service_per_replica():
     assert "--table=-1" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
 
 
+def test_media_relay_prefers_spreading_replicas_across_nodes():
+    spec = MediaRelaySpec.model_validate(
+        {
+            "replicas": 2,
+            "networkProfileRef": {"name": "public"},
+            "media": {"start": 20000, "end": 20003},
+        }
+    )
+    resources = build_media_relay_resources("home", "test", OWNER, spec, ["one.example", "two.example"])
+    deployments = [item for item in resources if item["kind"] == "Deployment"]
+    terms = [
+        item["spec"]["template"]["spec"]["affinity"]["podAntiAffinity"]["preferredDuringSchedulingIgnoredDuringExecution"][0]
+        for item in deployments
+    ]
+    assert [term["weight"] for term in terms] == [100, 100]
+    assert all(term["podAffinityTerm"]["topologyKey"] == "kubernetes.io/hostname" for term in terms)
+    assert all(
+        term["podAffinityTerm"]["labelSelector"]["matchLabels"]
+        == {
+            "app.kubernetes.io/name": "rtpengine",
+            "app.kubernetes.io/managed-by": "kubevoip",
+            "app.kubernetes.io/part-of": "kubevoip",
+        }
+        for term in terms
+    )
+
+
 def test_media_relay_services_can_be_built_before_addresses_resolve():
     spec = MediaRelaySpec.model_validate(
         {

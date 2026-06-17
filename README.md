@@ -14,7 +14,7 @@ Project home: [https://kubevoip.com](https://kubevoip.com)
 
 ```bash
 helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.2.6 \
+  --version 0.2.7 \
   --namespace telephony --create-namespace
 ```
 
@@ -28,9 +28,9 @@ namespace. Install a separate release for each telephony namespace:
 
 ```bash
 helm install kubevoip-home oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.2.6 --namespace telephony-home --create-namespace
+  --version 0.2.7 --namespace telephony-home --create-namespace
 helm install kubevoip-office oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.2.6 --namespace telephony-office --create-namespace
+  --version 0.2.7 --namespace telephony-office --create-namespace
 ```
 
 CRDs remain cluster-scoped Kubernetes resources shared by all releases.

@@ -29,8 +29,6 @@
       Z" />
   </defs>
 
-  <rect width="932" height="910" fill="#fbfbfb" />
-
   <g id="ship-wheel" transform="translate(466 455)">
     <use href="#helm-handle" />
     <use href="#helm-handle" transform="rotate(60)" />

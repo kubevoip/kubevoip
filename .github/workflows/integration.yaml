@@ -36,7 +36,7 @@ jobs:
       - run: kind load docker-image kubevoip:test kubevoip-sipp:test
       - uses: azure/setup-helm@v5
       - run: |
-          kubectl apply -f examples/namespace.yaml
+          kubectl create namespace asterisk-demo
           kubectl create namespace kubevoip-platform
           for namespace in asterisk-demo kubevoip-platform; do
             helm install kubevoip charts/kubevoip \

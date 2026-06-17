@@ -8,8 +8,8 @@
 [![Integration](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml)
 
 KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.4 runs Kamailio
-gateways, RTPengine media relays, SIP users, dial policies, and Asterisk worker
-pods, with runtime data stored in PostgreSQL.
+gateways, RTPengine media relays, SIP users, dial policies, and Asterisk
+application pods, with runtime data stored in PostgreSQL.
 
 Project home: [https://kubevoip.com](https://kubevoip.com)
 
@@ -85,22 +85,12 @@ See [docs/networking.md](docs/networking.md) for the networking details.
 - `DialPolicy`: an ordered list of scopes a caller is allowed to search.
 - `SIPUser`: a PostgreSQL-backed identity registered through Kamailio.
 - `SIPTrunk`: provider-neutral inbound and outbound trunk policy.
-- `CallRoute`: ordered call routing to users, trunks, or Asterisk workers.
+- `CallRoute`: ordered call routing to users, trunks, or AsteriskPool targets.
 - `MediaRelay`: stable, horizontally scalable RTPengine replicas.
-- `AsteriskPool`: private application workers, currently providing Echo.
+- `AsteriskPool`: private Asterisk application pods, currently providing Echo.
 - `SIPGateway`: Kamailio registration and media-relay edge policy.
 
 Platform resources are experimental in v0.4. References are namespace-local.
-
-The checked-in examples are small on purpose. They show the namespace and core
-platform resources without assuming a public address, SIP provider, or database
-implementation:
-
-```bash
-kubectl apply -f examples/namespace.yaml
-kubectl apply -f examples/platform.yaml
-kubectl -n asterisk-demo get networkprofile,mediarelay,asteriskpool
-```
 
 A PostgreSQL database and a standard connection Secret are required before
 creating `SIPGateway` and `SIPUser` resources. KubeVoIP does not install or
@@ -164,9 +154,9 @@ uv run kopf run kubevoip/main.py --namespace telephony --verbose
 
 ## Release scope
 
-Releases publish multi-architecture operator, Asterisk-worker, Kamailio, and
-RTPengine images plus the OCI Helm chart. Asterisk 22 LTS, Kamailio 5.6.3,
-and RTPengine 10.5.3.5 are pinned for v0.4.
+Releases publish multi-architecture operator, Asterisk, Kamailio, and RTPengine
+images plus the OCI Helm chart. Asterisk 22 LTS, Kamailio 5.6.3, and RTPengine
+10.5.3.5 are pinned for v0.4.
 
 Helm leaves CRDs installed on uninstall.
 

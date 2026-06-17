@@ -7,9 +7,15 @@ from kubevoip.config import GROUP, PLURAL, VERSION
 from kubevoip.controller import DependencyError, InvalidSpecError, WaitingForLoadBalancerError, reconcile
 from kubevoip.k8s import Kubernetes
 from kubevoip.platform_controller import (
+    delete_call_route_controller,
+    delete_call_scope_controller,
+    delete_dial_policy_controller,
+    delete_sip_trunk_controller,
     delete_sip_user_controller,
     reconcile_asterisk_pool,
     reconcile_call_route_controller,
+    reconcile_call_scope_controller,
+    reconcile_dial_policy_controller,
     reconcile_gateway,
     reconcile_media_relay,
     reconcile_network_profile,
@@ -76,9 +82,31 @@ _handlers("networkprofiles", reconcile_network_profile)
 _handlers("mediarelays", reconcile_media_relay)
 _handlers("asteriskpools", reconcile_asterisk_pool)
 _handlers("sipgateways", reconcile_gateway)
+_handlers("callscopes", reconcile_call_scope_controller)
+_handlers("dialpolicies", reconcile_dial_policy_controller)
 _handlers("siptrunks", reconcile_sip_trunk_controller)
 _handlers("callroutes", reconcile_call_route_controller)
 _handlers("sipusers", reconcile_sip_user_controller)
+
+
+@kopf.on.delete(GROUP, VERSION, "callscopes")
+def delete_call_scope(body, spec, **_):
+    delete_call_scope_controller(body, spec, Kubernetes())
+
+
+@kopf.on.delete(GROUP, VERSION, "dialpolicies")
+def delete_dial_policy(body, spec, **_):
+    delete_dial_policy_controller(body, spec, Kubernetes())
+
+
+@kopf.on.delete(GROUP, VERSION, "siptrunks")
+def delete_sip_trunk(body, spec, **_):
+    delete_sip_trunk_controller(body, spec, Kubernetes())
+
+
+@kopf.on.delete(GROUP, VERSION, "callroutes")
+def delete_call_route(body, spec, **_):
+    delete_call_route_controller(body, spec, Kubernetes())
 
 
 @kopf.on.delete(GROUP, VERSION, "sipusers")

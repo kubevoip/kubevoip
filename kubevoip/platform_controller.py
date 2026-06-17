@@ -7,11 +7,26 @@ from kubernetes.client import ApiException
 from pydantic import ValidationError
 
 from kubevoip.controller import DependencyError, InvalidSpecError, WaitingForLoadBalancerError
-from kubevoip.database import database_ready, delete_sip_user, reconcile_sip_user
+from kubevoip.database import (
+    database_ready,
+    delete_call_route,
+    delete_call_scope,
+    delete_dial_policy,
+    delete_sip_trunk,
+    delete_sip_user,
+    reconcile_call_route,
+    reconcile_call_scope,
+    reconcile_dial_policy,
+    reconcile_sip_trunk,
+    reconcile_sip_user,
+    trunk_digest_ha1,
+)
 from kubevoip.k8s import Kubernetes
 from kubevoip.models import (
     AsteriskPoolSpec,
     CallRouteSpec,
+    CallScopeSpec,
+    DialPolicySpec,
     MediaRelaySpec,
     NetworkProfileSpec,
     SIPGatewaySpec,
@@ -75,6 +90,36 @@ def _database_secret(namespace: str, name: str, kubernetes: Kubernetes) -> dict[
     return values
 
 
+def _gateway(namespace: str, name: str, kubernetes: Kubernetes) -> tuple[dict[str, Any], SIPGatewaySpec]:
+    try:
+        gateway = kubernetes.read_custom(namespace, "sipgateways", name)
+    except ApiException as error:
+        raise DependencyError(f"SIPGateway {namespace}/{name} is unavailable") from error
+    return gateway, _model(SIPGatewaySpec, gateway["spec"])
+
+
+def _gateway_database(namespace: str, name: str, kubernetes: Kubernetes) -> tuple[SIPGatewaySpec, dict[str, str]]:
+    _gateway_body, spec = _gateway(namespace, name, kubernetes)
+    return spec, _database_secret(namespace, spec.database_secret_ref.name, kubernetes)
+
+
+def _cleanup_database(body: dict[str, Any], spec: Any, kubernetes: Kubernetes) -> dict[str, str]:
+    namespace = body["metadata"]["namespace"]
+    secret_name = body.get("status", {}).get("databaseSecretRef", "")
+    try:
+        gateway_name = spec.gateway_ref.name
+        gateway = kubernetes.read_custom(namespace, "sipgateways", gateway_name)
+        secret_name = _model(SIPGatewaySpec, gateway["spec"]).database_secret_ref.name
+    except Exception as error:
+        if not secret_name:
+            raise error
+    return _database_secret(namespace, secret_name, kubernetes)
+
+
+def _uid(body: dict[str, Any]) -> str:
+    return body["metadata"].get("uid", f"{body['metadata'].get('namespace', '')}/{body['metadata']['name']}")
+
+
 def reconcile_network_profile(body: dict[str, Any], raw_spec: dict[str, Any], _kubernetes: Kubernetes) -> dict[str, Any]:
     spec = _model(NetworkProfileSpec, raw_spec)
     address = _profile_address(spec)
@@ -120,9 +165,7 @@ def reconcile_media_relay(body: dict[str, Any], raw_spec: dict[str, Any], kubern
             source = "ClusterIP"
         if not address:
             if spec.network.service.type == "LoadBalancer":
-                raise WaitingForLoadBalancerError(
-                    f"waiting for LoadBalancer address for RTPengine replica {index}"
-                )
+                raise WaitingForLoadBalancerError(f"waiting for LoadBalancer address for RTPengine replica {index}")
             raise DependencyError(f"external address for RTPengine replica {index} is unavailable")
         addresses.append(address)
         relay_status.append(
@@ -202,40 +245,12 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
     if not relays:
         raise DependencyError("MediaRelay has no resolved relay endpoints")
     relay_endpoints = [f"udp:{item['service']}.{namespace}.svc.cluster.local:2223" for item in relays]
-    trunk_items = kubernetes.list_custom(namespace, "siptrunks")
-    trunks = {
-        item["metadata"]["name"]: _model(SIPTrunkSpec, item["spec"])
-        for item in trunk_items
-        if item.get("spec", {}).get("gatewayRef", {}).get("name") == name
-    }
-    route_items = kubernetes.list_custom(namespace, "callroutes")
-    routes = sorted(
-        [
-            (item["metadata"]["name"], _model(CallRouteSpec, item["spec"]))
-            for item in route_items
-            if item.get("spec", {}).get("gatewayRef", {}).get("name") == name
-        ],
-        key=lambda item: (item[1].priority, item[0]),
-    )
-    known_trunks = set(trunks)
-    if any(route.target.trunk_ref not in known_trunks for _, route in routes if route.target.trunk_ref):
-        raise DependencyError("CallRoute references an unavailable SIPTrunk")
-    pool_names = {route.target.asterisk_pool_ref for _, route in routes if route.target.asterisk_pool_ref}
-    asterisk_targets = {pool: f"{pool}-asterisk-pool.{namespace}.svc.cluster.local" for pool in pool_names}
-    user_names = {route.target.sip_user_ref for _, route in routes if route.target.sip_user_ref}
-    sip_user_targets = {}
-    for user_name in user_names:
-        try:
-            user = kubernetes.read_custom(namespace, "sipusers", user_name)
-            sip_user_targets[user_name] = _model(SIPUserSpec, user["spec"]).auth_username
-        except ApiException as error:
-            raise DependencyError(f"SIPUser {namespace}/{user_name} is unavailable") from error
     database = _database_secret(namespace, spec.database_secret_ref.name, kubernetes)
     try:
         database_ready(database)
     except Exception as error:
         raise DependencyError("gateway database is unavailable") from error
-    for resource in build_gateway_resources(name, namespace, body, spec, address, internal_address, relay_endpoints, asterisk_targets, sip_user_targets, trunks, routes):
+    for resource in build_gateway_resources(name, namespace, body, spec, address, internal_address, relay_endpoints):
         kubernetes.apply(resource)
     ready = kubernetes.ready_deployment_replicas(namespace, service_name)
     return platform_status(
@@ -243,73 +258,186 @@ def reconcile_gateway(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes
         ready == spec.replicas,
         "ReplicasReady" if ready == spec.replicas else "Reconciling",
         f"{ready}/{spec.replicas} Kamailio replicas are ready",
-        {"readyReplicas": ready, "resolvedAddress": address, "addressSource": address_source, "internalAddress": internal_address},
+        {
+            "readyReplicas": ready,
+            "resolvedAddress": address,
+            "addressSource": address_source,
+            "internalAddress": internal_address,
+            "databaseSecretRef": spec.database_secret_ref.name,
+        },
         body.get("status", {}).get("conditions"),
         [
             ("ReferencesResolved", True, "Resolved", "Gateway references are resolved"),
-            ("DatabaseReady", True, "Connected", "Gateway database is reachable"),
+            ("DatabaseReady", True, "Connected", "Gateway database is reachable and schema is applied"),
             ("ExternalAddressResolved", True, "Resolved", "Gateway external address is resolved"),
-            ("RoutesReady", True, "Validated", f"{len(routes)} routes are configured"),
-            ("ConfigurationReady", True, "Rendered", "Kamailio configuration is rendered"),
+            ("RuntimeDataReady", True, "DatabaseBacked", "Gateway runtime data is loaded from PostgreSQL"),
+            ("ConfigurationReady", True, "Rendered", "Static Kamailio configuration is rendered"),
             ("ReplicasReady", ready == spec.replicas, "Available" if ready == spec.replicas else "Reconciling", f"{ready}/{spec.replicas} Kamailio replicas are ready"),
+        ],
+    )
+
+
+def reconcile_call_scope_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
+    spec = _model(CallScopeSpec, raw_spec)
+    namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
+    try:
+        gateway_spec, database = _gateway_database(namespace, spec.gateway_ref.name, kubernetes)
+        reconcile_call_scope(database, namespace, name, _uid(body), spec.gateway_ref.name)
+    except ApiException as error:
+        raise DependencyError("Call scope dependencies are unavailable") from error
+    except Exception as error:
+        raise DependencyError("Call scope database reconciliation failed") from error
+    return platform_status(
+        body["metadata"].get("generation", 1),
+        True,
+        "ScopeReady",
+        "Call scope is stored in the gateway database",
+        {"gateway": spec.gateway_ref.name, "databaseSecretRef": gateway_spec.database_secret_ref.name},
+        body.get("status", {}).get("conditions"),
+        [
+            ("ReferencesResolved", True, "Resolved", "Call scope references are resolved"),
+            ("DatabaseReady", True, "Stored", "Call scope is stored"),
+        ],
+    )
+
+
+def reconcile_dial_policy_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
+    spec = _model(DialPolicySpec, raw_spec)
+    namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
+    try:
+        gateway_spec, database = _gateway_database(namespace, spec.gateway_ref.name, kubernetes)
+        for scope in spec.scopes:
+            kubernetes.read_custom(namespace, "callscopes", scope.name)
+        reconcile_dial_policy(database, namespace, name, _uid(body), spec.gateway_ref.name, [scope.name for scope in spec.scopes])
+    except ApiException as error:
+        raise DependencyError("Dial policy dependencies are unavailable") from error
+    except Exception as error:
+        raise DependencyError("Dial policy database reconciliation failed") from error
+    return platform_status(
+        body["metadata"].get("generation", 1),
+        True,
+        "PolicyReady",
+        "Dial policy is stored in the gateway database",
+        {"gateway": spec.gateway_ref.name, "databaseSecretRef": gateway_spec.database_secret_ref.name, "scopes": [scope.name for scope in spec.scopes]},
+        body.get("status", {}).get("conditions"),
+        [
+            ("ReferencesResolved", True, "Resolved", "Dial policy references are resolved"),
+            ("DatabaseReady", True, "Stored", "Dial policy is stored"),
         ],
     )
 
 
 def reconcile_sip_trunk_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
     spec = _model(SIPTrunkSpec, raw_spec)
-    namespace = body["metadata"]["namespace"]
+    namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
+    caller_id = None
+    digest_username = digest_realm = digest_ha1 = None
     try:
-        kubernetes.read_custom(namespace, "sipgateways", spec.gateway_ref.name)
+        gateway_spec, database = _gateway_database(namespace, spec.gateway_ref.name, kubernetes)
+        if spec.inbound.dial_policy_ref:
+            kubernetes.read_custom(namespace, "dialpolicies", spec.inbound.dial_policy_ref.name)
         if spec.outbound.caller_id_secret_ref:
-            kubernetes.read_secret(namespace, spec.outbound.caller_id_secret_ref.name, spec.outbound.caller_id_secret_ref.key)
+            caller_id = kubernetes.read_secret(namespace, spec.outbound.caller_id_secret_ref.name, spec.outbound.caller_id_secret_ref.key)
         auth = spec.outbound.authentication
         if auth.mode == "Digest" and auth.digest:
-            kubernetes.read_secret(namespace, auth.digest.username_secret_ref.name, auth.digest.username_secret_ref.key)
-            kubernetes.read_secret(namespace, auth.digest.password_secret_ref.name, auth.digest.password_secret_ref.key)
+            if not auth.digest.realm:
+                raise InvalidSpecError("Digest authentication requires digest.realm in v0.4")
+            digest_username = kubernetes.read_secret(namespace, auth.digest.username_secret_ref.name, auth.digest.username_secret_ref.key)
+            digest_password = kubernetes.read_secret(namespace, auth.digest.password_secret_ref.name, auth.digest.password_secret_ref.key)
+            digest_realm = auth.digest.realm
+            digest_ha1 = trunk_digest_ha1(digest_username, digest_realm, digest_password)
+        reconcile_sip_trunk(
+            database,
+            namespace,
+            name,
+            _uid(body),
+            spec.gateway_ref.name,
+            spec.termination_uri,
+            spec.inbound.allowed_source_cidrs,
+            spec.inbound.dial_policy_ref.name if spec.inbound.dial_policy_ref else None,
+            caller_id,
+            digest_username,
+            digest_realm,
+            digest_ha1,
+        )
+    except InvalidSpecError:
+        raise
     except (ApiException, KeyError, UnicodeDecodeError) as error:
         raise DependencyError("SIP trunk dependencies are unavailable") from error
+    except Exception as error:
+        raise DependencyError("SIP trunk database reconciliation failed") from error
     return platform_status(
         body["metadata"].get("generation", 1),
         True,
         "TrunkReady",
-        "SIP trunk is configured",
+        "SIP trunk is stored in the gateway database",
         {
             "gateway": spec.gateway_ref.name,
             "terminationUri": spec.termination_uri,
             "authenticationMode": spec.outbound.authentication.mode,
+            "databaseSecretRef": gateway_spec.database_secret_ref.name,
         },
         body.get("status", {}).get("conditions"),
         [
             ("ReferencesResolved", True, "Resolved", "SIP trunk references are resolved"),
-            ("ConfigurationReady", True, "Validated", "SIP trunk configuration is valid"),
+            ("DatabaseReady", True, "Stored", "SIP trunk runtime data is stored"),
         ],
     )
 
 
 def reconcile_call_route_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
     spec = _model(CallRouteSpec, raw_spec)
-    namespace = body["metadata"]["namespace"]
+    namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
+    target_kind = target_ref = ""
+    target_extension = target_host = None
     try:
-        kubernetes.read_custom(namespace, "sipgateways", spec.gateway_ref.name)
+        gateway_spec, database = _gateway_database(namespace, spec.gateway_ref.name, kubernetes)
+        kubernetes.read_custom(namespace, "callscopes", spec.scope_ref.name)
         if spec.target.sip_user_ref:
             kubernetes.read_custom(namespace, "sipusers", spec.target.sip_user_ref)
+            target_kind, target_ref = "SIPUser", spec.target.sip_user_ref
         if spec.target.asterisk_pool_ref:
             kubernetes.read_custom(namespace, "asteriskpools", spec.target.asterisk_pool_ref)
+            target_kind, target_ref = "AsteriskPool", spec.target.asterisk_pool_ref
+            target_extension = spec.target.extension
+            target_host = f"{spec.target.asterisk_pool_ref}-asterisk-pool.{namespace}.svc.cluster.local"
         if spec.target.trunk_ref:
             kubernetes.read_custom(namespace, "siptrunks", spec.target.trunk_ref)
+            target_kind, target_ref = "SIPTrunk", spec.target.trunk_ref
+        reconcile_call_route(
+            database,
+            namespace,
+            name,
+            _uid(body),
+            spec.gateway_ref.name,
+            spec.scope_ref.name,
+            spec.priority,
+            spec.match.called_number,
+            target_kind,
+            target_ref,
+            target_extension,
+            target_host,
+        )
     except ApiException as error:
         raise DependencyError("Call route dependencies are unavailable") from error
+    except Exception as error:
+        raise DependencyError("Call route database reconciliation failed") from error
     return platform_status(
         body["metadata"].get("generation", 1),
         True,
         "RouteReady",
-        "Call route is configured",
-        {"gateway": spec.gateway_ref.name, "priority": spec.priority, "calledNumber": spec.match.called_number},
+        "Call route is stored in the gateway database",
+        {
+            "gateway": spec.gateway_ref.name,
+            "scope": spec.scope_ref.name,
+            "priority": spec.priority,
+            "calledNumber": spec.match.called_number,
+            "databaseSecretRef": gateway_spec.database_secret_ref.name,
+        },
         body.get("status", {}).get("conditions"),
         [
             ("ReferencesResolved", True, "Resolved", "Call route references are resolved"),
-            ("ConfigurationReady", True, "Validated", "Call route configuration is valid"),
+            ("DatabaseReady", True, "Stored", "Call route runtime data is stored"),
         ],
     )
 
@@ -318,11 +446,21 @@ def reconcile_sip_user_controller(body: dict[str, Any], raw_spec: dict[str, Any]
     spec = _model(SIPUserSpec, raw_spec)
     namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
     try:
-        gateway = kubernetes.read_custom(namespace, "sipgateways", spec.gateway_ref.name)
-        gateway_spec = _model(SIPGatewaySpec, gateway["spec"])
+        gateway_spec, database = _gateway_database(namespace, spec.gateway_ref.name, kubernetes)
+        kubernetes.read_custom(namespace, "dialpolicies", spec.dial_policy_ref.name)
         password = kubernetes.read_secret(namespace, spec.password_secret_ref.name, spec.password_secret_ref.key)
-        database = _database_secret(namespace, gateway_spec.database_secret_ref.name, kubernetes)
-        reconcile_sip_user(database, namespace, name, spec.auth_username, spec.gateway_ref.name, password, spec.caller_id)
+        reconcile_sip_user(
+            database,
+            namespace,
+            name,
+            _uid(body),
+            spec.auth_username,
+            spec.gateway_ref.name,
+            spec.extension,
+            spec.dial_policy_ref.name,
+            password,
+            spec.caller_id,
+        )
     except (ApiException, KeyError, UnicodeDecodeError) as error:
         raise DependencyError("SIP user dependencies are unavailable") from error
     except Exception as error:
@@ -331,36 +469,49 @@ def reconcile_sip_user_controller(body: dict[str, Any], raw_spec: dict[str, Any]
         body["metadata"].get("generation", 1),
         True,
         "SubscriberReady",
-        "SIP subscriber is stored in the gateway database",
+        "SIP subscriber and runtime data are stored in the gateway database",
         {
             "gateway": spec.gateway_ref.name,
             "extension": spec.extension,
+            "dialPolicy": spec.dial_policy_ref.name,
             "databaseSecretRef": gateway_spec.database_secret_ref.name,
         },
         body.get("status", {}).get("conditions"),
         [
             ("ReferencesResolved", True, "Resolved", "SIP user references are resolved"),
-            ("DatabaseReady", True, "Connected", "Gateway database is reachable"),
-            ("ConfigurationReady", True, "Stored", "SIP subscriber is stored"),
+            ("DatabaseReady", True, "Stored", "SIP subscriber and runtime data are stored"),
         ],
     )
 
 
-def delete_sip_user_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> None:
-    spec = _model(SIPUserSpec, raw_spec)
+def _delete_runtime_row(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes, model, delete_func) -> None:
+    spec = _model(model, raw_spec)
     namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
     try:
-        try:
-            gateway = kubernetes.read_custom(namespace, "sipgateways", spec.gateway_ref.name)
-            database_secret_name = _model(SIPGatewaySpec, gateway["spec"]).database_secret_ref.name
-        except ApiException as error:
-            database_secret_name = body.get("status", {}).get("databaseSecretRef")
-            if error.status != 404 or not database_secret_name:
-                raise
-        database = _database_secret(namespace, database_secret_name, kubernetes)
-        delete_sip_user(database, namespace, name)
+        database = _cleanup_database(body, spec, kubernetes)
+        delete_func(database, namespace, name)
     except ApiException as error:
         if error.status != 404:
-            raise DependencyError("SIP user database cleanup failed") from error
+            raise DependencyError("runtime database cleanup failed") from error
     except Exception as error:
-        raise DependencyError("SIP user database cleanup failed") from error
+        raise DependencyError("runtime database cleanup failed") from error
+
+
+def delete_call_scope_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> None:
+    _delete_runtime_row(body, raw_spec, kubernetes, CallScopeSpec, delete_call_scope)
+
+
+def delete_dial_policy_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> None:
+    _delete_runtime_row(body, raw_spec, kubernetes, DialPolicySpec, delete_dial_policy)
+
+
+def delete_sip_trunk_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> None:
+    _delete_runtime_row(body, raw_spec, kubernetes, SIPTrunkSpec, delete_sip_trunk)
+
+
+def delete_call_route_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> None:
+    _delete_runtime_row(body, raw_spec, kubernetes, CallRouteSpec, delete_call_route)
+
+
+def delete_sip_user_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> None:
+    _delete_runtime_row(body, raw_spec, kubernetes, SIPUserSpec, delete_sip_user)

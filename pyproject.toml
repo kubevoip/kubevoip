@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kubevoip"
-version = "0.3.0"
+version = "0.4.0"
 description = "A Kubernetes operator for scalable SIP platforms."
 readme = "README.md"
 requires-python = ">=3.12"

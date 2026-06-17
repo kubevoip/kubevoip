@@ -2,6 +2,26 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.4.0] - 2026-06-17
+
+### Added
+
+- `CallScope` and `DialPolicy` APIs for CUCM-inspired route visibility and
+  caller authorization.
+- PostgreSQL-backed runtime tables for SIP users, trunks, routes, scopes, and
+  policies.
+- Realm-bound HA1 storage for outbound digest trunks so raw provider passwords
+  are not stored in PostgreSQL.
+
+### Changed
+
+- `SIPUser` now requires `dialPolicyRef`.
+- `CallRoute` now requires `scopeRef`.
+- Trusted inbound `SIPTrunk` CIDRs now require `inbound.dialPolicyRef`.
+- Kamailio now looks up route and trunk runtime data from PostgreSQL instead
+  of rendering it into ConfigMaps. Normal user, trunk, route, scope, and policy
+  changes no longer roll Kamailio pods.
+
 ## [0.3.0] - 2026-06-17
 
 ### Added

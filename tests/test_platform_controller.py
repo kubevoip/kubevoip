@@ -129,7 +129,7 @@ def test_gateway_creates_load_balancer_service_before_waiting_for_ingress():
     assert api.applied[0]["kind"] == "Service"
 
 
-def test_gateway_uses_first_class_trunks_and_routes(monkeypatch):
+def test_gateway_uses_static_config_and_database_runtime_data(monkeypatch):
     monkeypatch.setattr(platform_controller, "database_ready", lambda _database: None)
     custom = {
         (
@@ -137,44 +137,6 @@ def test_gateway_uses_first_class_trunks_and_routes(monkeypatch):
             "mediarelays",
             "home",
         ): {"status": {"relays": [{"service": "home-rtpengine-0"}]}},
-        (
-            "test",
-            "siptrunks",
-            "provider-primary",
-        ): {
-            "metadata": {"name": "provider-primary"},
-            "spec": {
-                "gatewayRef": {"name": "home"},
-                "terminationUri": "provider.example.net",
-                "inbound": {"allowedSourceCidrs": ["203.0.113.0/24"]},
-            },
-        },
-        (
-            "test",
-            "callroutes",
-            "outbound-b",
-        ): {
-            "metadata": {"name": "outbound-b"},
-            "spec": {
-                "gatewayRef": {"name": "home"},
-                "priority": 20,
-                "match": {"calledNumber": "600"},
-                "target": {"asteriskPoolRef": "applications", "extension": "600"},
-            },
-        },
-        (
-            "test",
-            "callroutes",
-            "outbound-a",
-        ): {
-            "metadata": {"name": "outbound-a"},
-            "spec": {
-                "gatewayRef": {"name": "home"},
-                "priority": 10,
-                "match": {"calledNumber": "+..."},
-                "target": {"trunkRef": "provider-primary"},
-            },
-        },
     }
     api = FakeKubernetes(custom=custom, secrets={("test", "db"): {"host": "postgres", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"}})
     body = {
@@ -191,20 +153,31 @@ def test_gateway_uses_first_class_trunks_and_routes(monkeypatch):
     status = reconcile_gateway(body, spec, api)
 
     config = next(resource for resource in api.applied if resource["kind"] == "ConfigMap")["data"]["kamailio.cfg"]
-    routes_condition = next(condition for condition in status["conditions"] if condition["type"] == "RoutesReady")
+    runtime_condition = next(condition for condition in status["conditions"] if condition["type"] == "RuntimeDataReady")
     assert status["phase"] == "Ready"
-    assert routes_condition["message"] == "2 routes are configured"
-    assert config.index('starts_with($rU, "+")') < config.index('$rU == "600"')
-    assert 'provider.example.net' in config
+    assert runtime_condition["reason"] == "DatabaseBacked"
+    assert "kubevoip_call_route" in config
+    assert "provider.example.net" not in config
 
 
-def test_sip_trunk_and_call_route_statuses_validate_references():
+def test_sip_trunk_and_call_route_statuses_validate_references(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(platform_controller, "reconcile_sip_trunk", lambda *args: calls.setdefault("trunk", args))
+    monkeypatch.setattr(platform_controller, "reconcile_call_route", lambda *args: calls.setdefault("route", args))
     custom = {
-        ("test", "sipgateways", "home"): {"spec": {}},
+        (
+            "test",
+            "sipgateways",
+            "home",
+        ): {"spec": {"databaseSecretRef": {"name": "db"}, "networkProfileRef": {"name": "public"}, "mediaRelayRef": {"name": "home"}}},
         ("test", "sipusers", "daniel"): {"spec": {}},
         ("test", "siptrunks", "provider-primary"): {"spec": {}},
+        ("test", "callscopes", "internal"): {"spec": {"gatewayRef": {"name": "home"}}},
+        ("test", "callscopes", "external"): {"spec": {"gatewayRef": {"name": "home"}}},
+        ("test", "dialpolicies", "external"): {"spec": {"gatewayRef": {"name": "home"}, "scopes": [{"name": "external"}]}},
     }
     secrets = {
+        ("test", "db"): {"host": "postgres", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"},
         ("test", "caller-id", "value"): "+15551234567",
         ("test", "provider-auth", "username"): "user",
         ("test", "provider-auth", "password"): "password",
@@ -212,26 +185,30 @@ def test_sip_trunk_and_call_route_statuses_validate_references():
     api = FakeKubernetes(custom=custom, secrets=secrets)
     trunk_status = reconcile_sip_trunk_controller(
         {"metadata": {"name": "provider-primary", "namespace": "test", "generation": 1}},
-        {
-            "gatewayRef": {"name": "home"},
-            "terminationUri": "provider.example.net",
-            "outbound": {
-                "callerIdSecretRef": {"name": "caller-id", "key": "value"},
-                "authentication": {
+            {
+                "gatewayRef": {"name": "home"},
+                "terminationUri": "provider.example.net",
+                "inbound": {"allowedSourceCidrs": ["203.0.113.0/24"], "dialPolicyRef": {"name": "external"}},
+                "outbound": {
+                    "callerIdSecretRef": {"name": "caller-id", "key": "value"},
+                    "authentication": {
                     "mode": "Digest",
-                    "digest": {
-                        "usernameSecretRef": {"name": "provider-auth", "key": "username"},
-                        "passwordSecretRef": {"name": "provider-auth", "key": "password"},
+                        "digest": {
+                            "usernameSecretRef": {"name": "provider-auth", "key": "username"},
+                            "passwordSecretRef": {"name": "provider-auth", "key": "password"},
+                            "realm": "provider.example.net",
+                        },
                     },
                 },
-            },
         },
         api,
     )
     route_status = reconcile_call_route_controller(
         {"metadata": {"name": "inbound", "namespace": "test", "generation": 1}},
-        {"gatewayRef": {"name": "home"}, "match": {"calledNumber": "100"}, "target": {"sipUserRef": "daniel"}},
+        {"gatewayRef": {"name": "home"}, "scopeRef": {"name": "internal"}, "match": {"calledNumber": "100"}, "target": {"sipUserRef": "daniel"}},
         api,
     )
     assert trunk_status["phase"] == "Ready"
     assert route_status["phase"] == "Ready"
+    assert calls["trunk"][11] == platform_controller.trunk_digest_ha1("user", "provider.example.net", "password")
+    assert calls["route"][4:8] == ("home", "internal", 1000, "100")

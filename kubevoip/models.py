@@ -191,6 +191,7 @@ class AsteriskPoolSpec(Model):
 
 class SIPUserSpec(Model):
     gateway_ref: LocalReference = Field(alias="gatewayRef")
+    dial_policy_ref: LocalReference = Field(alias="dialPolicyRef")
     extension: str = Field(pattern=r"^[0-9]+$", max_length=20)
     auth_username: str = Field(alias="authUsername", pattern=r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", max_length=40)
     caller_id: str | None = Field(default=None, alias="callerId", max_length=80)
@@ -215,6 +216,8 @@ class TrunkOutboundAuthentication(Model):
     def validate_digest(self) -> "TrunkOutboundAuthentication":
         if self.mode == "Digest" and not self.digest:
             raise ValueError("Digest authentication requires digest settings")
+        if self.mode == "Digest" and self.digest and not self.digest.realm:
+            raise ValueError("Digest authentication requires digest.realm")
         if self.mode == "None" and self.digest:
             raise ValueError("digest settings require mode Digest")
         return self
@@ -222,11 +225,14 @@ class TrunkOutboundAuthentication(Model):
 
 class TrunkInboundSpec(Model):
     allowed_source_cidrs: list[str] = Field(default_factory=list, alias="allowedSourceCidrs")
+    dial_policy_ref: LocalReference | None = Field(default=None, alias="dialPolicyRef")
 
     @model_validator(mode="after")
     def validate_cidrs(self) -> "TrunkInboundSpec":
         for network in self.allowed_source_cidrs:
             ipaddress.ip_network(network, strict=False)
+        if self.allowed_source_cidrs and not self.dial_policy_ref:
+            raise ValueError("trusted inbound trunks require inbound.dialPolicyRef")
         return self
 
 
@@ -263,9 +269,26 @@ class RouteTarget(Model):
 
 class CallRouteSpec(Model):
     gateway_ref: LocalReference = Field(alias="gatewayRef")
+    scope_ref: LocalReference = Field(alias="scopeRef")
     priority: int = Field(default=1000, ge=0, le=1_000_000)
     match: RouteMatch
     target: RouteTarget
+
+
+class CallScopeSpec(Model):
+    gateway_ref: LocalReference = Field(alias="gatewayRef")
+
+
+class DialPolicySpec(Model):
+    gateway_ref: LocalReference = Field(alias="gatewayRef")
+    scopes: list[LocalReference] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_unique_scopes(self) -> "DialPolicySpec":
+        names = [item.name for item in self.scopes]
+        if len(names) != len(set(names)):
+            raise ValueError("DialPolicy scopes must be unique")
+        return self
 
 
 class SIPGatewaySpec(Model):

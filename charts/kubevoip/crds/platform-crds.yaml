@@ -85,14 +85,15 @@ spec:
           spec:
             type: object
             properties:
-              gatewayRef:
+              gatewayRef: &id001
                 type: object
                 properties:
-                  name: &id001
+                  name: &id002
                     type: string
                     minLength: 1
                 required:
                 - name
+              dialPolicyRef: *id001
               extension:
                 type: string
                 pattern: ^[0-9]+$
@@ -107,13 +108,14 @@ spec:
               passwordSecretRef:
                 type: object
                 properties:
-                  name: *id001
-                  key: *id001
+                  name: *id002
+                  key: *id002
                 required:
                 - name
                 - key
             required:
             - gatewayRef
+            - dialPolicyRef
             - extension
             - authUsername
             - passwordSecretRef
@@ -153,7 +155,7 @@ spec:
           spec:
             type: object
             properties:
-              gatewayRef:
+              gatewayRef: &id002
                 type: object
                 properties:
                   name: &id001
@@ -169,10 +171,15 @@ spec:
                     type: array
                     items:
                       type: string
+                  dialPolicyRef: *id002
+                x-kubernetes-validations:
+                - rule: '!has(self.allowedSourceCidrs) || size(self.allowedSourceCidrs)
+                    == 0 || has(self.dialPolicyRef)'
+                  message: trusted inbound trunks require inbound.dialPolicyRef
               outbound:
                 type: object
                 properties:
-                  callerIdSecretRef: &id002
+                  callerIdSecretRef: &id003
                     type: object
                     properties:
                       name: *id001
@@ -192,8 +199,8 @@ spec:
                       digest:
                         type: object
                         properties:
-                          usernameSecretRef: *id002
-                          passwordSecretRef: *id002
+                          usernameSecretRef: *id003
+                          passwordSecretRef: *id003
                           realm:
                             type: string
                             minLength: 1
@@ -204,6 +211,8 @@ spec:
                     x-kubernetes-validations:
                     - rule: self.mode != 'Digest' || has(self.digest)
                       message: Digest authentication requires digest settings
+                    - rule: self.mode != 'Digest' || has(self.digest.realm)
+                      message: Digest authentication requires digest.realm
                     - rule: self.mode != 'None' || !has(self.digest)
                       message: digest settings require mode Digest
             required:
@@ -245,14 +254,15 @@ spec:
           spec:
             type: object
             properties:
-              gatewayRef:
+              gatewayRef: &id001
                 type: object
                 properties:
-                  name: &id001
+                  name: &id002
                     type: string
                     minLength: 1
                 required:
                 - name
+              scopeRef: *id001
               priority:
                 type: integer
                 minimum: 0
@@ -270,9 +280,9 @@ spec:
               target:
                 type: object
                 properties:
-                  sipUserRef: *id001
-                  asteriskPoolRef: *id001
-                  trunkRef: *id001
+                  sipUserRef: *id002
+                  asteriskPoolRef: *id002
+                  trunkRef: *id002
                   extension:
                     type: string
                     pattern: ^[0-9]+$
@@ -284,8 +294,106 @@ spec:
                   message: Asterisk pool routes require extension
             required:
             - gatewayRef
+            - scopeRef
             - match
             - target
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: callscopes.kubevoip.com
+spec:
+  group: kubevoip.com
+  scope: Namespaced
+  names:
+    plural: callscopes
+    singular: callscope
+    kind: CallScope
+    shortNames:
+    - scope
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              gatewayRef:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                required:
+                - name
+            required:
+            - gatewayRef
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: dialpolicies.kubevoip.com
+spec:
+  group: kubevoip.com
+  scope: Namespaced
+  names:
+    plural: dialpolicies
+    singular: dialpolicy
+    kind: DialPolicy
+    shortNames:
+    - dialpolicy
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              gatewayRef: &id001
+                type: object
+                properties:
+                  name:
+                    type: string
+                    minLength: 1
+                required:
+                - name
+              scopes:
+                type: array
+                items: *id001
+                minItems: 1
+            required:
+            - gatewayRef
+            - scopes
           status:
             type: object
             x-kubernetes-preserve-unknown-fields: true

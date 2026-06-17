@@ -1,4 +1,4 @@
-from kubevoip.models import AsteriskPoolSpec, CallRouteSpec, MediaRelaySpec, SIPGatewaySpec, SIPTrunkSpec
+from kubevoip.models import AsteriskPoolSpec, MediaRelaySpec, SIPGatewaySpec
 from kubevoip.platform_controller import resolve_external_address
 from kubevoip.platform_resources import (
     build_asterisk_pool_resources,
@@ -108,7 +108,7 @@ def test_gateway_service_can_be_built_before_address_resolves():
     assert service["spec"]["type"] == "LoadBalancer"
 
 
-def test_gateway_resources_reference_trunk_secrets_without_rendering_values():
+def test_gateway_resources_do_not_mount_trunk_secrets():
     owner = {**OWNER, "kind": "SIPGateway"}
     spec = SIPGatewaySpec.model_validate(
         {
@@ -117,47 +117,15 @@ def test_gateway_resources_reference_trunk_secrets_without_rendering_values():
             "mediaRelayRef": {"name": "home"},
         }
     )
-    trunks = {
-        "provider-primary": SIPTrunkSpec.model_validate(
-            {
-                "gatewayRef": {"name": "home"},
-                "terminationUri": "provider.example.net",
-                "outbound": {
-                    "callerIdSecretRef": {"name": "caller-id", "key": "value"},
-                    "authentication": {
-                        "mode": "Digest",
-                        "digest": {
-                            "usernameSecretRef": {"name": "provider-auth", "key": "username"},
-                            "passwordSecretRef": {"name": "provider-auth", "key": "password"},
-                        },
-                    },
-                },
-            }
-        )
-    }
-    routes = [
-        (
-            "outbound",
-            CallRouteSpec.model_validate(
-                {
-                    "gatewayRef": {"name": "home"},
-                    "match": {"calledNumber": "+..."},
-                    "target": {"trunkRef": "provider-primary"},
-                }
-            ),
-        )
-    ]
-
-    resources = build_gateway_resources("home", "test", owner, spec, "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"], {}, {}, trunks, routes)
+    resources = build_gateway_resources("home", "test", owner, spec, "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
 
     config = next(item for item in resources if item["kind"] == "ConfigMap")["data"]["kamailio.cfg"]
     deployment = next(item for item in resources if item["kind"] == "Deployment")
-    env = {item["name"]: item for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"]}
+    container = deployment["spec"]["template"]["spec"]["containers"][0]
     assert "provider-auth" not in config
     assert "caller-id" not in config
-    assert env["KUBEVOIP_TRUNK_PROVIDER_PRIMARY_CALLER_ID"]["valueFrom"]["secretKeyRef"] == {"name": "caller-id", "key": "value"}
-    assert env["KUBEVOIP_TRUNK_PROVIDER_PRIMARY_AUTH_USERNAME"]["valueFrom"]["secretKeyRef"] == {"name": "provider-auth", "key": "username"}
-    assert env["KUBEVOIP_TRUNK_PROVIDER_PRIMARY_AUTH_PASSWORD"]["valueFrom"]["secretKeyRef"] == {"name": "provider-auth", "key": "password"}
+    assert "env" not in container
+    assert container["envFrom"] == [{"secretRef": {"name": "db"}}]
 
 
 def test_asterisk_pool_uses_private_service_and_headless_identity():

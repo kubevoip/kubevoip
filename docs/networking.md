@@ -23,20 +23,31 @@ when available, otherwise the managed Service DNS name. This lets trunk-facing
 dialogs advertise a public address while LAN phones receive an internal
 Record-Route target for in-dialog requests such as `ACK`, `BYE`, and re-INVITE.
 
-Kamailio receives SIP, writes registrations to PostgreSQL, selects a route, and
-asks an RTPengine replica to rewrite SDP. Direct trunk-to-phone media flows
-through RTPengine without Asterisk. Calls to an `AsteriskPool` application flow
-through RTPengine and one selected Asterisk worker.
+Kamailio receives SIP, writes registrations to PostgreSQL, selects a route from
+PostgreSQL runtime data, and asks an RTPengine replica to rewrite SDP. Direct
+trunk-to-phone media flows through RTPengine without Asterisk. Calls to an
+`AsteriskPool` application flow through RTPengine and one selected Asterisk
+worker.
 
 IP-authenticated trunks trust only `SIPTrunk.spec.inbound.allowedSourceCidrs`.
 Untrusted INVITEs receive a proxy-authentication challenge and must authenticate
-as a `SIPUser`. Outbound `CallRoute` resources select a declared trunk with
-`trunkRef`.
+as a `SIPUser`.
+
+`CallRoute` resources belong to a `CallScope`. `DialPolicy` resources define
+the ordered scopes a caller can search. Authenticated SIP users use
+`SIPUser.spec.dialPolicyRef`; trusted inbound trunk calls use
+`SIPTrunk.spec.inbound.dialPolicyRef`. Route selection sorts by policy scope
+order, then route priority, then route resource name.
 
 Outbound trunks can optionally use Secret-backed caller ID and SIP digest
-credentials. KubeVoIP injects those values into Kamailio as environment
-variables and keeps raw credential values out of rendered ConfigMaps, statuses,
-Events, and logs.
+credentials. KubeVoIP stores caller ID and realm-bound HA1 runtime values in
+PostgreSQL. Raw digest passwords are not stored, but HA1 is credential-equivalent
+for that SIP realm and PostgreSQL must be protected accordingly. Rendered
+ConfigMaps, statuses, Events, and logs must not expose raw passwords or HA1.
+
+Normal changes to SIP users, trunks, routes, scopes, policies, caller ID, and
+digest credentials update PostgreSQL and do not roll Kamailio pods. Static
+gateway/network changes can still roll pods.
 
 Public forwarding must preserve port numbers. Forward UDP `5060` to the
 Kamailio address and each RTPengine replica's assigned range to that replica's

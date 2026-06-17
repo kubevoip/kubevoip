@@ -1,7 +1,18 @@
 import pytest
 from pydantic import ValidationError
 
-from kubevoip.models import CallRouteSpec, MediaRelaySpec, NetworkProfileSpec, RouteMatch, RouteTarget, SIPGatewaySpec, SIPTrunkSpec
+from kubevoip.models import (
+    CallRouteSpec,
+    CallScopeSpec,
+    DialPolicySpec,
+    MediaRelaySpec,
+    NetworkProfileSpec,
+    RouteMatch,
+    RouteTarget,
+    SIPGatewaySpec,
+    SIPTrunkSpec,
+    SIPUserSpec,
+)
 
 
 def test_network_profile_validates_cidrs():
@@ -64,7 +75,7 @@ def test_sip_trunk_validates_provider_neutral_digest_auth():
         {
             "gatewayRef": {"name": "home"},
             "terminationUri": "provider.example.net",
-            "inbound": {"allowedSourceCidrs": ["203.0.113.0/24"]},
+            "inbound": {"allowedSourceCidrs": ["203.0.113.0/24"], "dialPolicyRef": {"name": "external"}},
             "outbound": {
                 "callerIdSecretRef": {"name": "caller-id", "key": "value"},
                 "authentication": {
@@ -93,6 +104,14 @@ def test_sip_trunk_validates_provider_neutral_digest_auth():
             {
                 "gatewayRef": {"name": "home"},
                 "terminationUri": "provider.example.net",
+                "inbound": {"allowedSourceCidrs": ["203.0.113.0/24"]},
+            }
+        )
+    with pytest.raises(ValidationError):
+        SIPTrunkSpec.model_validate(
+            {
+                "gatewayRef": {"name": "home"},
+                "terminationUri": "provider.example.net",
                 "outbound": {"authentication": {"mode": "Digest"}},
             }
         )
@@ -102,6 +121,7 @@ def test_call_route_preserves_current_matching_and_targets():
     route = CallRouteSpec.model_validate(
         {
             "gatewayRef": {"name": "home"},
+            "scopeRef": {"name": "external"},
             "priority": 10,
             "match": {"calledNumber": "+61..."},
             "target": {"trunkRef": "provider-primary"},
@@ -113,10 +133,32 @@ def test_call_route_preserves_current_matching_and_targets():
         CallRouteSpec.model_validate(
             {
                 "gatewayRef": {"name": "home"},
+                "scopeRef": {"name": "internal"},
                 "match": {"calledNumber": "600"},
                 "target": {"asteriskPoolRef": "applications"},
             }
         )
+
+
+def test_call_scope_dial_policy_and_user_policy_refs_validate():
+    scope = CallScopeSpec.model_validate({"gatewayRef": {"name": "home"}})
+    policy = DialPolicySpec.model_validate(
+        {"gatewayRef": {"name": "home"}, "scopes": [{"name": "internal"}, {"name": "external"}]}
+    )
+    user = SIPUserSpec.model_validate(
+        {
+            "gatewayRef": {"name": "home"},
+            "dialPolicyRef": {"name": "internal-external"},
+            "extension": "100",
+            "authUsername": "daniel",
+            "passwordSecretRef": {"name": "daniel-sip", "key": "password"},
+        }
+    )
+    assert scope.gateway_ref.name == "home"
+    assert [item.name for item in policy.scopes] == ["internal", "external"]
+    assert user.dial_policy_ref.name == "internal-external"
+    with pytest.raises(ValidationError):
+        DialPolicySpec.model_validate({"gatewayRef": {"name": "home"}, "scopes": [{"name": "internal"}, {"name": "internal"}]})
 
 
 def test_gateway_service_validation_remains_provider_neutral():

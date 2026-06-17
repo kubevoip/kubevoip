@@ -86,18 +86,27 @@ SPECS = {
     "SIPUser": obj(
         {
             "gatewayRef": local_ref,
+            "dialPolicyRef": local_ref,
             "extension": string(pattern=r"^[0-9]+$", maxLength=20),
             "authUsername": string(pattern=r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", maxLength=40),
             "callerId": string(maxLength=80),
             "passwordSecretRef": secret_key_ref,
         },
-        ("gatewayRef", "extension", "authUsername", "passwordSecretRef"),
+        ("gatewayRef", "dialPolicyRef", "extension", "authUsername", "passwordSecretRef"),
     ),
     "SIPTrunk": obj(
         {
             "gatewayRef": local_ref,
             "terminationUri": name,
-            "inbound": obj({"allowedSourceCidrs": array(string())}),
+            "inbound": obj({"allowedSourceCidrs": array(string()), "dialPolicyRef": local_ref})
+            | {
+                "x-kubernetes-validations": [
+                    {
+                        "rule": "!has(self.allowedSourceCidrs) || size(self.allowedSourceCidrs) == 0 || has(self.dialPolicyRef)",
+                        "message": "trusted inbound trunks require inbound.dialPolicyRef",
+                    }
+                ]
+            },
             "outbound": obj(
                 {
                     "callerIdSecretRef": secret_key_ref,
@@ -117,6 +126,7 @@ SPECS = {
                     | {
                         "x-kubernetes-validations": [
                             {"rule": "self.mode != 'Digest' || has(self.digest)", "message": "Digest authentication requires digest settings"},
+                            {"rule": "self.mode != 'Digest' || has(self.digest.realm)", "message": "Digest authentication requires digest.realm"},
                             {"rule": "self.mode != 'None' || !has(self.digest)", "message": "digest settings require mode Digest"},
                         ]
                     },
@@ -128,11 +138,25 @@ SPECS = {
     "CallRoute": obj(
         {
             "gatewayRef": local_ref,
+            "scopeRef": local_ref,
             "priority": integer(minimum=0, maximum=1000000, default=1000),
             "match": route_match,
             "target": route_target,
         },
-        ("gatewayRef", "match", "target"),
+        ("gatewayRef", "scopeRef", "match", "target"),
+    ),
+    "CallScope": obj(
+        {
+            "gatewayRef": local_ref,
+        },
+        ("gatewayRef",),
+    ),
+    "DialPolicy": obj(
+        {
+            "gatewayRef": local_ref,
+            "scopes": array(local_ref, minItems=1),
+        },
+        ("gatewayRef", "scopes"),
     ),
     "MediaRelay": obj(
         {
@@ -201,6 +225,8 @@ PLURALS = {
     "SIPUser": ("sipusers", "sipuser", ["sipuser"]),
     "SIPTrunk": ("siptrunks", "siptrunk", ["siptrunk"]),
     "CallRoute": ("callroutes", "callroute", ["callroute"]),
+    "CallScope": ("callscopes", "callscope", ["scope"]),
+    "DialPolicy": ("dialpolicies", "dialpolicy", ["dialpolicy"]),
     "MediaRelay": ("mediarelays", "mediarelay", ["relay"]),
     "AsteriskPool": ("asteriskpools", "asteriskpool", ["astpool"]),
     "SIPGateway": ("sipgateways", "sipgateway", ["sipgw"]),

@@ -132,6 +132,47 @@ spec:
     name: home
 ---
 apiVersion: kubevoip.com/v1alpha1
+kind: CallScope
+metadata:
+  name: internal
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: CallScope
+metadata:
+  name: external
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: DialPolicy
+metadata:
+  name: internal-only
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+  scopes:
+    - name: internal
+---
+apiVersion: kubevoip.com/v1alpha1
+kind: DialPolicy
+metadata:
+  name: internal-external
+  namespace: kubevoip-platform
+spec:
+  gatewayRef:
+    name: home
+  scopes:
+    - name: internal
+    - name: external
+---
+apiVersion: kubevoip.com/v1alpha1
 kind: SIPTrunk
 metadata:
   name: provider-primary
@@ -140,6 +181,9 @@ spec:
   gatewayRef:
     name: home
   terminationUri: provider-primary
+  inbound:
+    dialPolicyRef:
+      name: internal-only
   outbound:
     callerIdSecretRef:
       name: provider-caller-id
@@ -163,6 +207,8 @@ metadata:
 spec:
   gatewayRef:
     name: home
+  scopeRef:
+    name: internal
   priority: 100
   match:
     calledNumber: "100"
@@ -177,6 +223,8 @@ metadata:
 spec:
   gatewayRef:
     name: home
+  scopeRef:
+    name: internal
   priority: 200
   match:
     calledNumber: "600"
@@ -192,6 +240,8 @@ metadata:
 spec:
   gatewayRef:
     name: home
+  scopeRef:
+    name: external
   priority: 300
   match:
     calledNumber: "+61..."
@@ -206,6 +256,8 @@ metadata:
 spec:
   gatewayRef:
     name: home
+  dialPolicyRef:
+    name: internal-external
   extension: "100"
   authUsername: daniel
   callerId: Daniel <100>

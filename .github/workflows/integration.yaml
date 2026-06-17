@@ -69,10 +69,28 @@ jobs:
           kubectl -n kubevoip-platform wait --for=create deployment/home-sip-gateway --timeout=240s
           kubectl -n kubevoip-platform wait --for=condition=Available deployment/home-sip-gateway --timeout=240s
           for attempt in $(seq 1 30); do
-            test "$(kubectl -n kubevoip-platform get sipuser daniel -o jsonpath='{.status.phase}')" = "Ready" && break
+            test "$(kubectl -n kubevoip-platform get sipgateway home -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get callscope internal -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get callscope external -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get dialpolicy internal-only -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get dialpolicy internal-external -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get sipuser daniel -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get siptrunk provider-primary -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get callroute user-100 -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get callroute echo -o jsonpath='{.status.phase}')" = "Ready" && \
+            test "$(kubectl -n kubevoip-platform get callroute outbound-provider -o jsonpath='{.status.phase}')" = "Ready" && break
             sleep 5
           done
+          test "$(kubectl -n kubevoip-platform get sipgateway home -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get callscope internal -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get callscope external -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get dialpolicy internal-only -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get dialpolicy internal-external -o jsonpath='{.status.phase}')" = "Ready"
           test "$(kubectl -n kubevoip-platform get sipuser daniel -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get siptrunk provider-primary -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get callroute user-100 -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get callroute echo -o jsonpath='{.status.phase}')" = "Ready"
+          test "$(kubectl -n kubevoip-platform get callroute outbound-provider -o jsonpath='{.status.phase}')" = "Ready"
           ! kubectl -n kubevoip-platform get configmaps -o yaml | grep -E 'integration-password|phone-password|provider-password|provider-user'
           ! kubectl -n kubevoip-platform get networkprofile,callscope,dialpolicy,sipuser,siptrunk,callroute,mediarelay,asteriskpool,sipgateway -o yaml | grep -E 'integration-password|phone-password|provider-password|provider-user'
           ! kubectl -n kubevoip-platform logs deployment/kubevoip-kubevoip | grep -E 'integration-password|phone-password|provider-password|provider-user'

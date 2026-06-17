@@ -21,7 +21,7 @@
     m=audio [media_port] RTP/AVP 0
     a=rtpmap:0 PCMU/8000
   ]]></send>
-  <recv response="100" optional="true"/>
+  <recv response="100" optional="global"/>
   <recv response="200" rrs="true"/>
   <send><![CDATA[
     ACK sip:100@[remote_ip]:[remote_port] SIP/2.0

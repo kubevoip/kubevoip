@@ -32,7 +32,7 @@ spec:
                 fieldRef:
                   fieldPath: metadata.namespace
             - name: KUBEVOIP_ASTERISK_WORKER_IMAGE
-              value: "{{ .Values.asteriskWorkerImage.repository }}:{{ .Values.asteriskWorkerImage.tag }}"
+              value: "{{ .Values.asteriskImage.repository }}:{{ .Values.asteriskImage.tag }}"
             - name: KUBEVOIP_KAMAILIO_IMAGE
               value: "{{ .Values.kamailioImage.repository }}:{{ .Values.kamailioImage.tag }}"
             - name: KUBEVOIP_RTPENGINE_IMAGE

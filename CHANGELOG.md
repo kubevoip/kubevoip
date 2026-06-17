@@ -2,6 +2,16 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.4.2] - 2026-06-17
+
+### Changed
+
+- Runtime images now build from separate component repositories:
+  `kubevoip-kamailio`, `kubevoip-rtpengine`, and `kubevoip-asterisk`.
+- The platform repository now publishes only the operator image and Helm chart.
+- The Asterisk runtime image was renamed from `kubevoip-asterisk-worker` to
+  `kubevoip-asterisk`.
+
 ## [0.4.1] - 2026-06-17
 
 ### Changed

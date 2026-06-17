@@ -9,11 +9,14 @@ pods, with runtime data stored in PostgreSQL.
 
 Project home: [https://kubevoip.com](https://kubevoip.com)
 
+The platform release pins tested runtime images from the component repositories
+`kubevoip-kamailio`, `kubevoip-rtpengine`, and `kubevoip-asterisk`.
+
 ## Install
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace telephony --create-namespace
 ```
 
@@ -28,9 +31,9 @@ namespace. Install a separate release for each telephony namespace:
 
 ```bash
 helm install kubevoip-home oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.1 --namespace telephony-home --create-namespace
+  --version 0.4.2 --namespace telephony-home --create-namespace
 helm install kubevoip-office oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.1 --namespace telephony-office --create-namespace
+  --version 0.4.2 --namespace telephony-office --create-namespace
 ```
 
 CRDs remain cluster-scoped Kubernetes resources shared by all releases.
@@ -44,7 +47,7 @@ for testing, so you do not need to choose a production database first.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.1 \
+  --version 0.4.2 \
   --namespace telephony --create-namespace
 
 kubectl apply -f examples/quickstart-two-phones.yaml

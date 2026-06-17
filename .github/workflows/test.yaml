@@ -59,30 +59,3 @@ jobs:
           tags: kubevoip:test
           cache-from: type=gha,scope=kubevoip-${{ matrix.arch }}
           cache-to: type=gha,scope=kubevoip-${{ matrix.arch }},mode=max
-      - uses: docker/build-push-action@v7.2.0
-        with:
-          context: .
-          file: runtime/Dockerfile
-          platforms: ${{ matrix.platform }}
-          push: false
-          tags: kubevoip-asterisk-worker:test
-          cache-from: type=gha,scope=asterisk-worker-${{ matrix.arch }}
-          cache-to: type=gha,scope=asterisk-worker-${{ matrix.arch }},mode=max
-      - uses: docker/build-push-action@v7.2.0
-        with:
-          context: .
-          file: runtime/kamailio/Dockerfile
-          platforms: ${{ matrix.platform }}
-          push: false
-          tags: kubevoip-kamailio:test
-          cache-from: type=gha,scope=kamailio-${{ matrix.arch }}
-          cache-to: type=gha,scope=kamailio-${{ matrix.arch }},mode=max
-      - uses: docker/build-push-action@v7.2.0
-        with:
-          context: .
-          file: runtime/rtpengine/Dockerfile
-          platforms: ${{ matrix.platform }}
-          push: false
-          tags: kubevoip-rtpengine:test
-          cache-from: type=gha,scope=rtpengine-${{ matrix.arch }}
-          cache-to: type=gha,scope=rtpengine-${{ matrix.arch }},mode=max

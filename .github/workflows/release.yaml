@@ -43,36 +43,6 @@ jobs:
             runner: ubuntu-24.04-arm
             platform: linux/arm64
             arch: arm64
-          - image: kubevoip-asterisk-worker
-            file: runtime/Dockerfile
-            runner: ubuntu-24.04
-            platform: linux/amd64
-            arch: amd64
-          - image: kubevoip-asterisk-worker
-            file: runtime/Dockerfile
-            runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            arch: arm64
-          - image: kubevoip-kamailio
-            file: runtime/kamailio/Dockerfile
-            runner: ubuntu-24.04
-            platform: linux/amd64
-            arch: amd64
-          - image: kubevoip-kamailio
-            file: runtime/kamailio/Dockerfile
-            runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            arch: arm64
-          - image: kubevoip-rtpengine
-            file: runtime/rtpengine/Dockerfile
-            runner: ubuntu-24.04
-            platform: linux/amd64
-            arch: amd64
-          - image: kubevoip-rtpengine
-            file: runtime/rtpengine/Dockerfile
-            runner: ubuntu-24.04-arm
-            platform: linux/arm64
-            arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -117,12 +87,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create multi-architecture image manifests
         run: |
-          for image in kubevoip kubevoip-asterisk-worker kubevoip-kamailio kubevoip-rtpengine; do
-            docker buildx imagetools create \
-              --tag "ghcr.io/kubevoip/${image}:${GITHUB_REF_NAME}" \
-              "ghcr.io/kubevoip/${image}:${GITHUB_REF_NAME}-amd64" \
-              "ghcr.io/kubevoip/${image}:${GITHUB_REF_NAME}-arm64"
-          done
+          docker buildx imagetools create \
+            --tag "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}" \
+            "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}-amd64" \
+            "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}-arm64"
       - uses: azure/setup-helm@v5
       - run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin

@@ -25,30 +25,6 @@ jobs:
       - uses: docker/build-push-action@v7.2.0
         with:
           context: .
-          file: runtime/Dockerfile
-          load: true
-          tags: kubevoip-asterisk-worker:test
-          cache-from: type=gha,scope=integration-asterisk-worker
-          cache-to: type=gha,scope=integration-asterisk-worker,mode=max
-      - uses: docker/build-push-action@v7.2.0
-        with:
-          context: .
-          file: runtime/kamailio/Dockerfile
-          load: true
-          tags: kubevoip-kamailio:test
-          cache-from: type=gha,scope=integration-kamailio
-          cache-to: type=gha,scope=integration-kamailio,mode=max
-      - uses: docker/build-push-action@v7.2.0
-        with:
-          context: .
-          file: runtime/rtpengine/Dockerfile
-          load: true
-          tags: kubevoip-rtpengine:test
-          cache-from: type=gha,scope=integration-rtpengine
-          cache-to: type=gha,scope=integration-rtpengine,mode=max
-      - uses: docker/build-push-action@v7.2.0
-        with:
-          context: .
           file: integration/Dockerfile.sipp
           load: true
           tags: kubevoip-sipp:test
@@ -57,7 +33,7 @@ jobs:
       - uses: helm/kind-action@v1
         with:
           cluster_name: kind
-      - run: kind load docker-image kubevoip:test kubevoip-asterisk-worker:test kubevoip-kamailio:test kubevoip-rtpengine:test kubevoip-sipp:test
+      - run: kind load docker-image kubevoip:test kubevoip-sipp:test
       - uses: azure/setup-helm@v5
       - run: |
           kubectl apply -f examples/namespace.yaml
@@ -65,10 +41,7 @@ jobs:
           for namespace in asterisk-demo kubevoip-platform; do
             helm install kubevoip charts/kubevoip \
               --namespace "${namespace}" \
-              --set image.repository=kubevoip --set image.tag=test \
-              --set asteriskWorkerImage.repository=kubevoip-asterisk-worker --set asteriskWorkerImage.tag=test \
-              --set kamailioImage.repository=kubevoip-kamailio --set kamailioImage.tag=test \
-              --set rtpengineImage.repository=kubevoip-rtpengine --set rtpengineImage.tag=test
+              --set image.repository=kubevoip --set image.tag=test
           done
       - name: Verify namespace-scoped Secret access
         run: |

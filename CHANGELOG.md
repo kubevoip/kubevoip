@@ -2,6 +2,13 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.4.1] - 2026-06-17
+
+### Changed
+
+- Project ownership moved to `kubevoip/kubevoip`.
+- Release images and the OCI Helm chart now publish under `ghcr.io/kubevoip`.
+
 ## [0.4.0] - 2026-06-17
 
 ### Added

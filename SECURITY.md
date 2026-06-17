@@ -8,7 +8,7 @@ receives security fixes.
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through
-[GitHub private vulnerability reporting](https://github.com/danohn/kubevoip/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/kubevoip/kubevoip/security/advisories/new).
 Do not open a public issue for an undisclosed vulnerability.
 
 Include affected versions, reproduction steps, impact, and any suggested

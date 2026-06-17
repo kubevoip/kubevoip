@@ -25,7 +25,7 @@ jobs:
             echo "owner placeholders remain" >&2
             exit 1
           fi
-          test "${GITHUB_REPOSITORY_OWNER}" = "danohn"
+          test "${GITHUB_REPOSITORY_OWNER}" = "kubevoip"
 
   build-images:
     name: build ${{ matrix.image }} (${{ matrix.platform }})
@@ -88,14 +88,14 @@ jobs:
           file: ${{ matrix.file }}
           platforms: ${{ matrix.platform }}
           push: true
-          tags: ghcr.io/danohn/${{ matrix.image }}:${{ github.ref_name }}-${{ matrix.arch }}
+          tags: ghcr.io/kubevoip/${{ matrix.image }}:${{ github.ref_name }}-${{ matrix.arch }}
           no-cache: ${{ matrix.image == 'kubevoip' }}
           cache-from: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }},mode=max
       - name: Verify operator image contents
         if: matrix.image == 'kubevoip'
         run: |
-          docker run --rm --entrypoint python "ghcr.io/danohn/kubevoip:${GITHUB_REF_NAME}-${{ matrix.arch }}" -c '
+          docker run --rm --entrypoint python "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}-${{ matrix.arch }}" -c '
           import inspect
           import kubevoip.platform_resources as resources
 
@@ -119,15 +119,15 @@ jobs:
         run: |
           for image in kubevoip kubevoip-asterisk-worker kubevoip-kamailio kubevoip-rtpengine; do
             docker buildx imagetools create \
-              --tag "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}" \
-              "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}-amd64" \
-              "ghcr.io/danohn/${image}:${GITHUB_REF_NAME}-arm64"
+              --tag "ghcr.io/kubevoip/${image}:${GITHUB_REF_NAME}" \
+              "ghcr.io/kubevoip/${image}:${GITHUB_REF_NAME}-amd64" \
+              "ghcr.io/kubevoip/${image}:${GITHUB_REF_NAME}-arm64"
           done
       - uses: azure/setup-helm@v5
       - run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
           helm package charts/kubevoip
-          helm push "kubevoip-${GITHUB_REF_NAME#v}.tgz" oci://ghcr.io/danohn/charts
+          helm push "kubevoip-${GITHUB_REF_NAME#v}.tgz" oci://ghcr.io/kubevoip/charts
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

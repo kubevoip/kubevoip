@@ -1,7 +1,7 @@
 # KubeVoIP
 
-[![Test](https://github.com/danohn/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/test.yaml)
-[![Integration](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/danohn/kubevoip/actions/workflows/integration.yaml)
+[![Test](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml)
+[![Integration](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml)
 
 KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.4 runs Kamailio
 gateways, RTPengine media relays, SIP users, dial policies, and Asterisk worker
@@ -12,8 +12,8 @@ Project home: [https://kubevoip.com](https://kubevoip.com)
 ## Install
 
 ```bash
-helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.4.0 \
+helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
+  --version 0.4.1 \
   --namespace telephony --create-namespace
 ```
 
@@ -27,10 +27,10 @@ ServiceAccount receives a namespaced Role, including Secret access only in that
 namespace. Install a separate release for each telephony namespace:
 
 ```bash
-helm install kubevoip-home oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.4.0 --namespace telephony-home --create-namespace
-helm install kubevoip-office oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.4.0 --namespace telephony-office --create-namespace
+helm install kubevoip-home oci://ghcr.io/kubevoip/charts/kubevoip \
+  --version 0.4.1 --namespace telephony-home --create-namespace
+helm install kubevoip-office oci://ghcr.io/kubevoip/charts/kubevoip \
+  --version 0.4.1 --namespace telephony-office --create-namespace
 ```
 
 CRDs remain cluster-scoped Kubernetes resources shared by all releases.
@@ -43,8 +43,8 @@ This quickstart creates a SIP platform with two users: `alice` on extension
 for testing, so you do not need to choose a production database first.
 
 ```bash
-helm install kubevoip oci://ghcr.io/danohn/charts/kubevoip \
-  --version 0.4.0 \
+helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
+  --version 0.4.1 \
   --namespace telephony --create-namespace
 
 kubectl apply -f examples/quickstart-two-phones.yaml

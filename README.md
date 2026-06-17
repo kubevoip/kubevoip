@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="KubeVoIP logo" width="220">
+</p>
+
 # KubeVoIP
 
 [![Test](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml)

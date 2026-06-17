@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 932 910" role="img" aria-labelledby="title desc">
+  <title id="title">KubeVoIP logo</title>
+  <desc id="desc">A ship wheel combined with a rotary telephone dial, with editable SVG circles and text labels.</desc>
+  <defs>
+    <style>
+      .navy { fill: #06306f; }
+      .dial-ring {
+        fill: #fbfbfb;
+        stroke: #06306f;
+        stroke-width: 8;
+      }
+      .label {
+        fill: #06306f;
+        font-family: Inter, Arial, Helvetica, sans-serif;
+        font-size: 33px;
+        font-weight: 800;
+        text-anchor: middle;
+        dominant-baseline: central;
+      }
+    </style>
+
+    <path id="helm-handle" class="navy" d="
+      M -16 -304
+      C -15 -324 -30 -342 -29 -369
+      C -28 -400 -16 -421 0 -421
+      C 16 -421 28 -400 29 -369
+      C 30 -342 15 -324 16 -304
+      C 10 -298 -10 -298 -16 -304
+      Z" />
+  </defs>
+
+  <rect width="932" height="910" fill="#fbfbfb" />
+
+  <g id="ship-wheel" transform="translate(466 455)">
+    <use href="#helm-handle" />
+    <use href="#helm-handle" transform="rotate(60)" />
+    <use href="#helm-handle" transform="rotate(120)" />
+    <use href="#helm-handle" transform="rotate(180)" />
+    <use href="#helm-handle" transform="rotate(240)" />
+    <use href="#helm-handle" transform="rotate(300)" />
+
+    <path class="navy" fill-rule="evenodd" d="
+      M 0 -309
+      A 309 309 0 1 1 0 309
+      A 309 309 0 1 1 0 -309
+      Z
+      M 0 -236
+      A 236 236 0 1 0 0 236
+      A 236 236 0 1 0 0 -236
+      Z" />
+  </g>
+
+  <g id="rotary-dial">
+    <circle id="dial-face" cx="466" cy="455" r="247" fill="#fbfbfb" />
+    <circle id="center-hub" class="navy" cx="466" cy="455" r="110" />
+
+    <path id="dial-stop" class="navy" transform="translate(19 -9)" d="
+      M 576 518
+      C 587 512 596 515 603 527
+      C 619 554 642 580 676 597
+      C 689 604 692 612 685 624
+      L 670 649
+      C 663 661 652 662 641 652
+      C 608 623 584 591 572 550
+      C 568 536 568 523 576 518
+      Z" />
+
+    <circle class="dial-ring" cx="659.022" cy="420.965" r="38" />
+    <circle class="dial-ring" cx="623.216" cy="337.957" r="38" />
+    <circle class="dial-ring" cx="553.965" cy="279.848" r="38" />
+    <circle class="dial-ring" cx="466.000" cy="259.000" r="38" />
+    <circle class="dial-ring" cx="378.035" cy="279.848" r="38" />
+    <circle class="dial-ring" cx="308.784" cy="337.957" r="38" />
+    <circle class="dial-ring" cx="272.978" cy="420.965" r="38" />
+    <circle class="dial-ring" cx="278.234" cy="511.213" r="38" />
+    <circle class="dial-ring" cx="323.435" cy="589.503" r="38" />
+    <circle class="dial-ring" cx="398.964" cy="639.180" r="38" />
+    <circle class="dial-ring" cx="488.754" cy="649.675" r="38" />
+    <circle class="dial-ring" cx="573.704" cy="618.756" r="38" />
+
+    <text class="label" x="659.022" y="421.165">1</text>
+    <text class="label" x="623.216" y="337.957">2</text>
+    <text class="label" x="553.965" y="279.848">3</text>
+    <text class="label" x="466.000" y="259.000">4</text>
+    <text class="label" x="378.035" y="279.848">5</text>
+    <text class="label" x="308.784" y="337.957">6</text>
+    <text class="label" x="272.978" y="420.965">7</text>
+    <text class="label" x="278.234" y="511.213">8</text>
+    <text class="label" x="323.435" y="589.503">9</text>
+    <text class="label" x="398.964" y="639.180">0</text>
+    <text class="label" x="488.754" y="650.075" font-size="36">*</text>
+    <text class="label" x="573.704" y="619.056" font-size="34">#</text>
+  </g>
+</svg>

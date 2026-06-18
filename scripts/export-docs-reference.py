@@ -133,6 +133,7 @@ def generate(crd_path: Path) -> str:
         "---",
         'title: "API reference"',
         'description: "Generated Kubernetes API reference for KubeVoIP custom resources, including spec fields, validation constraints, and resource metadata."',
+        'url: "/reference/api/"',
         "---",
         "",
         "# API reference",

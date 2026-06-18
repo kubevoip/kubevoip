@@ -13,6 +13,8 @@ All notable changes to KubeVoIP are documented in this file.
 
 ### Changed
 
+- The platform chart now pins the split Kamailio, RTPengine, and Asterisk
+  runtime images to `v0.5.0`.
 - The operator now runs Alembic migrations before database reconciliation and
   keeps compatibility with existing pre-Alembic runtime schemas.
 - The operator image now installs with `uv` and uses a strict Docker build
@@ -25,6 +27,8 @@ All notable changes to KubeVoIP are documented in this file.
 - Raw SQL migration files and old migration guide documents.
 - Unused example and integration files that no longer match the current
   quickstart flow.
+- The legacy `examples/` directory; the CLI-backed quickstart is now the
+  supported way to create a demo platform.
 
 ## [0.4.3] - 2026-06-17
 

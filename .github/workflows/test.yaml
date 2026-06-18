@@ -64,7 +64,7 @@ jobs:
       - run: kubectl apply --dry-run=server -f config/crd/platform-crds.yaml
       - run: kubectl apply -f config/crd/platform-crds.yaml
       - run: kubectl create namespace kubevoip-platform && kubectl create namespace telephony
-      - run: kubectl apply --dry-run=server -f examples/quickstart-two-phones.yaml -f integration/platform.yaml
+      - run: kubectl apply --dry-run=server -f integration/platform.yaml
   containers:
     needs: changes
     if: needs.changes.outputs.run == 'true'

@@ -9,7 +9,36 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.filter.outputs.run }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+          if [[ -z "${base}" || "${base}" =~ ^0+$ ]]; then
+            base="$(git rev-list --max-parents=0 "${head}")"
+          fi
+          git diff --name-only "${base}" "${head}" > /tmp/changed-files
+          if grep -Ev '^(README\.md|CHANGELOG\.md|CONTRIBUTING\.md|SECURITY\.md|LICENSE|docs/|assets/)' /tmp/changed-files >/dev/null; then
+            echo "run=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "run=false" >> "${GITHUB_OUTPUT}"
+          fi
   test:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -37,6 +66,8 @@ jobs:
       - run: kubectl create namespace kubevoip-platform && kubectl create namespace telephony
       - run: kubectl apply --dry-run=server -f examples/quickstart-two-phones.yaml -f integration/platform.yaml
   containers:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     name: containers (${{ matrix.platform }})
     strategy:
       matrix:

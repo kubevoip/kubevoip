@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 ROOT = Path(__file__).parents[1]
 ALEMBIC_INI = ROOT / "database" / "alembic.ini"
 ALEMBIC_SCRIPT_LOCATION = ROOT / "database"
+_MIGRATION_LOCK = threading.Lock()
 
 
 class Base(DeclarativeBase):
@@ -178,13 +180,14 @@ def _session(database: dict[str, str]):
 
 
 def run_migrations(database: dict[str, str]) -> None:
-    logging.getLogger("alembic").setLevel(logging.WARNING)
-    config = Config(str(ALEMBIC_INI))
-    config.set_main_option("script_location", str(ALEMBIC_SCRIPT_LOCATION))
-    config.set_main_option("sqlalchemy.url", sqlalchemy_url(database).render_as_string(hide_password=False))
-    if _schema_matches_runtime_head(database):
-        command.stamp(config, "0001", purge=True)
-    command.upgrade(config, "head")
+    with _MIGRATION_LOCK:
+        logging.getLogger("alembic").setLevel(logging.WARNING)
+        config = Config(str(ALEMBIC_INI))
+        config.set_main_option("script_location", str(ALEMBIC_SCRIPT_LOCATION))
+        config.set_main_option("sqlalchemy.url", sqlalchemy_url(database).render_as_string(hide_password=False))
+        if _schema_matches_runtime_head(database):
+            command.stamp(config, "0001", purge=True)
+        command.upgrade(config, "head")
 
 
 def _schema_matches_runtime_head(database: dict[str, str]) -> bool:

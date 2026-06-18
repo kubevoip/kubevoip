@@ -5,15 +5,15 @@ image:
 
 asteriskImage:
   repository: ghcr.io/kubevoip/kubevoip-asterisk
-  tag: "v0.5.0"
+  tag: "v0.4.3"
 
 kamailioImage:
   repository: ghcr.io/kubevoip/kubevoip-kamailio
-  tag: "v0.5.0"
+  tag: "v0.4.3"
 
 rtpengineImage:
   repository: ghcr.io/kubevoip/kubevoip-rtpengine
-  tag: "v0.5.0"
+  tag: "v0.4.3"
 
 serviceAccount:
   create: true

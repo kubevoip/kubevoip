@@ -64,9 +64,12 @@ filename = "charts/kubevoip/Chart.yaml"
 
 [[tool.bumpversion.files]]
 filename = "charts/kubevoip/values.yaml"
-
-[[tool.bumpversion.files]]
-filename = "kubevoip/config.py"
+search = '''image:
+  repository: ghcr.io/kubevoip/kubevoip
+  tag: "v{current_version}"'''
+replace = '''image:
+  repository: ghcr.io/kubevoip/kubevoip
+  tag: "v{new_version}"'''
 
 [[tool.bumpversion.files]]
 filename = "README.md"

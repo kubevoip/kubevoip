@@ -104,10 +104,13 @@ jobs:
           awk -v heading="## [$version]" '$0 == heading {found=1; next} /^## \[/ {found=0} found' CHANGELOG.md > release-notes.md
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
       - name: Trigger docs reference refresh
-        if: ${{ secrets.DOCS_WORKFLOW_TOKEN != '' }}
         env:
           GH_TOKEN: ${{ secrets.DOCS_WORKFLOW_TOKEN }}
         run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "DOCS_WORKFLOW_TOKEN is not configured; skipping docs refresh dispatch."
+            exit 0
+          fi
           cat > /tmp/docs-dispatch.json <<JSON
           {
             "event_type": "platform-release",

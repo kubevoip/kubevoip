@@ -70,3 +70,6 @@ filename = "kubevoip/config.py"
 
 [[tool.bumpversion.files]]
 filename = "README.md"
+
+[[tool.bumpversion.files]]
+filename = "uv.lock"

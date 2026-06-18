@@ -39,7 +39,7 @@ helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
   --version 0.5.0 \
   --namespace telephony --create-namespace
 
-uvx kubevoip --schema-source cluster -n telephony init
+uvx kubevoip -n telephony init
 
 kubectl -n telephony rollout status deployment/postgres --timeout=180s
 kubectl -n telephony rollout status deployment/main-sip-gateway --timeout=240s
@@ -51,7 +51,7 @@ To use your own PostgreSQL database instead of the demo Deployment, skip
 the demo database setup and let `init` create the connection Secret:
 
 ```bash
-printf '%s' "$POSTGRES_PASSWORD" | uvx kubevoip --schema-source cluster -n telephony init \
+printf '%s' "$POSTGRES_PASSWORD" | uvx kubevoip -n telephony init \
   --database existing \
   --postgres-host "$POSTGRES_HOST" \
   --postgres-db kubevoip \

@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "bump-my-version>=1.4.0",
   "pyyaml>=6.0",
   "pytest>=8.0.0",
   "ruff>=0.6.0",
@@ -41,3 +42,31 @@ packages = ["kubevoip"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "database" = "database"
+
+[tool.bumpversion]
+current_version = "0.4.3"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+commit = true
+tag = false
+message = "Release {new_version}"
+tag_name = "v{new_version}"
+tag_message = "KubeVoIP v{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+
+[[tool.bumpversion.files]]
+filename = "kubevoip/__init__.py"
+
+[[tool.bumpversion.files]]
+filename = "charts/kubevoip/Chart.yaml"
+
+[[tool.bumpversion.files]]
+filename = "charts/kubevoip/values.yaml"
+
+[[tool.bumpversion.files]]
+filename = "kubevoip/config.py"
+
+[[tool.bumpversion.files]]
+filename = "README.md"

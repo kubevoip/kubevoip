@@ -26,6 +26,24 @@ helm template kubevoip charts/kubevoip >/dev/null
 Keep changes focused. Add tests for behavioral changes. Treat every `v1alpha1`
 API change as a compatibility decision that needs documentation.
 
+## Releases
+
+Use `bump-my-version` from a clean working tree for platform release bumps:
+
+```bash
+uv run bump-my-version bump patch
+git push origin main
+```
+
+The bump command updates the configured version files and creates the release
+commit. It does not create a Git tag. After CI passes on `main`, create and push
+the release tag:
+
+```bash
+git tag -a vX.Y.Z -m "KubeVoIP vX.Y.Z"
+git push origin vX.Y.Z
+```
+
 ## Pull requests
 
 Describe user-visible behavior, testing, and any compatibility or networking

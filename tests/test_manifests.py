@@ -52,6 +52,15 @@ def test_operator_image_includes_alembic_migrations():
     assert not (root / "database/versions/0002_runtime_routing.py").exists()
 
 
+def test_operator_package_includes_render_templates():
+    root = Path(__file__).parents[1]
+
+    assert (root / "kubevoip/templates/kamailio.cfg.j2").exists()
+    assert (root / "kubevoip/templates/asterisk/pjsip.conf.j2").exists()
+    assert (root / "kubevoip/templates/asterisk/extensions.conf.j2").exists()
+    assert (root / "kubevoip/templates/asterisk/rtp.conf.j2").exists()
+
+
 def test_discovery_rbac_names_include_release_namespace():
     import subprocess
 

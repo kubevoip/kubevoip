@@ -103,3 +103,18 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           awk -v heading="## [$version]" '$0 == heading {found=1; next} /^## \[/ {found=0} found' CHANGELOG.md > release-notes.md
           gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
+      - name: Trigger docs reference refresh
+        if: ${{ secrets.DOCS_WORKFLOW_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_WORKFLOW_TOKEN }}
+        run: |
+          cat > /tmp/docs-dispatch.json <<JSON
+          {
+            "event_type": "platform-release",
+            "client_payload": {
+              "ref": "${GITHUB_REF_NAME}",
+              "version": "${GITHUB_REF_NAME}"
+            }
+          }
+          JSON
+          gh api repos/kubevoip/docs/dispatches --method POST --input /tmp/docs-dispatch.json

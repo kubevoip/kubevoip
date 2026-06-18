@@ -20,7 +20,7 @@ The Helm chart pins tested runtime images from `kubevoip-kamailio`,
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.3 \
+  --version 0.5.0 \
   --namespace telephony --create-namespace
 ```
 
@@ -30,9 +30,9 @@ separate release for each telephony namespace:
 
 ```bash
 helm install kubevoip-home oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.3 --namespace telephony-home --create-namespace
+  --version 0.5.0 --namespace telephony-home --create-namespace
 helm install kubevoip-office oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.3 --namespace telephony-office --create-namespace
+  --version 0.5.0 --namespace telephony-office --create-namespace
 ```
 
 CRDs remain cluster-scoped Kubernetes resources shared by all releases.
@@ -46,7 +46,7 @@ testing, so you do not need to choose a production database first.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.4.3 \
+  --version 0.5.0 \
   --namespace telephony --create-namespace
 
 kubectl apply -f examples/quickstart-two-phones.yaml

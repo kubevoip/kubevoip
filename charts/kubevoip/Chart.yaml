@@ -5,6 +5,7 @@ type: application
 version: 0.4.3
 appVersion: "0.4.3"
 home: https://kubevoip.com
+icon: https://raw.githubusercontent.com/kubevoip/kubevoip/main/assets/logo.svg
 keywords: [voip, asterisk, sip, kubernetes, operator]
 sources:
   - https://github.com/kubevoip/kubevoip

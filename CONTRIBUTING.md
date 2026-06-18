@@ -23,11 +23,11 @@ helm lint charts/kubevoip
 helm template kubevoip charts/kubevoip >/dev/null
 ```
 
-Keep changes focused, add tests for behavioral changes, and treat every
-`v1alpha1` API change as a compatibility decision that requires documentation.
+Keep changes focused. Add tests for behavioral changes. Treat every `v1alpha1`
+API change as a compatibility decision that needs documentation.
 
 ## Pull requests
 
-Describe the user-visible behavior, testing performed, and any compatibility or
-networking implications. All required GitHub Actions checks must pass before a
-pull request is merged.
+Describe user-visible behavior, testing, and any compatibility or networking
+impact. All required GitHub Actions checks must pass before a pull request is
+merged.

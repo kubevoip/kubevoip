@@ -36,6 +36,22 @@ def test_chart_uses_namespace_scoped_rbac():
     assert "--all-namespaces" not in dockerfile
 
 
+def test_operator_image_includes_alembic_migrations():
+    root = Path(__file__).parents[1]
+    dockerfile = (root / "Dockerfile").read_text()
+    pyproject = (root / "pyproject.toml").read_text()
+
+    assert "COPY database /app/database" in dockerfile
+    assert "uv pip install --system --no-cache ." in dockerfile
+    assert "RUN pip install" not in dockerfile
+    assert '"database" = "database"' in pyproject
+    assert (root / "database/alembic.ini").exists()
+    assert (root / "database/env.py").exists()
+    assert (root / "database/versions/0001_runtime_schema.py").exists()
+    assert not (root / "database/versions/0001_kamailio_subscriber.py").exists()
+    assert not (root / "database/versions/0002_runtime_routing.py").exists()
+
+
 def test_discovery_rbac_names_include_release_namespace():
     import subprocess
 

@@ -7,14 +7,14 @@
 [![Test](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml)
 [![Integration](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml)
 
-KubeVoIP is a Kubernetes operator for SIP platforms. Version 0.4 runs Kamailio
-gateways, RTPengine media relays, SIP users, dial policies, and Asterisk
-application pods, with runtime data stored in PostgreSQL.
+KubeVoIP is a Kubernetes operator for SIP platforms. It runs Kamailio gateways,
+RTPengine media relays, SIP users, dial policies, and Asterisk application pods.
+PostgreSQL stores registrations, routes, policies, and trunk data.
 
 Project home: [https://kubevoip.com](https://kubevoip.com)
 
-The platform release pins tested runtime images from the component repositories
-`kubevoip-kamailio`, `kubevoip-rtpengine`, and `kubevoip-asterisk`.
+The Helm chart pins tested runtime images from `kubevoip-kamailio`,
+`kubevoip-rtpengine`, and `kubevoip-asterisk`.
 
 ## Install
 
@@ -24,14 +24,9 @@ helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
   --namespace telephony --create-namespace
 ```
 
-KubeVoIP v0.4 requires `CallScope` and `DialPolicy` resources for platform
-routing. v0.3 `SIPUser`, `SIPTrunk`, and `CallRoute` manifests need to be
-updated with policy and scope references; see
-[docs/migration-v0.4.md](docs/migration-v0.4.md).
-
-Each Helm release watches and manages only its installation namespace. Its
-ServiceAccount receives a namespaced Role, including Secret access only in that
-namespace. Install a separate release for each telephony namespace:
+Each Helm release watches only its installation namespace. The ServiceAccount
+uses a namespaced Role, including Secret access in that namespace. Install a
+separate release for each telephony namespace:
 
 ```bash
 helm install kubevoip-home oci://ghcr.io/kubevoip/charts/kubevoip \
@@ -46,8 +41,8 @@ CRDs remain cluster-scoped Kubernetes resources shared by all releases.
 
 This quickstart creates a SIP platform with two users: `alice` on extension
 `100` and `bob` on extension `101`. It assumes your cluster can provision UDP
-`LoadBalancer` Services. It also includes a single-pod PostgreSQL Deployment
-for testing, so you do not need to choose a production database first.
+`LoadBalancer` Services. It includes a single-pod PostgreSQL Deployment for
+testing, so you do not need to choose a production database first.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
@@ -80,7 +75,7 @@ See [docs/networking.md](docs/networking.md) for the networking details.
 
 ## APIs
 
-- `NetworkProfile`: shared external addressing and local-network policy.
+- `NetworkProfile`: shared external addressing and local network policy.
 - `CallScope`: a searchable bucket of call routes, such as internal or external.
 - `DialPolicy`: an ordered list of scopes a caller is allowed to search.
 - `SIPUser`: a PostgreSQL-backed identity registered through Kamailio.
@@ -90,13 +85,13 @@ See [docs/networking.md](docs/networking.md) for the networking details.
 - `AsteriskPool`: private Asterisk application pods, currently providing Echo.
 - `SIPGateway`: Kamailio registration and media-relay edge policy.
 
-Platform resources are experimental in v0.4. References are namespace-local.
+Platform resources are experimental. References are namespace-local.
 
-A PostgreSQL database and a standard connection Secret are required before
-creating `SIPGateway` and `SIPUser` resources. KubeVoIP does not install or
+A PostgreSQL database and a standard connection Secret must exist before you
+create `SIPGateway` and `SIPUser` resources. KubeVoIP does not install or
 require CNPG. The Secret keys are `host`, `port`, `dbname`, `user`, and
-`password`. `SIPTrunk` resources reference trunk credentials and outbound
-caller ID values from Secrets. Keep those values out of ConfigMaps and Git.
+`password`. `SIPTrunk` resources read trunk credentials and outbound caller ID
+values from Secrets. Keep those values out of ConfigMaps and Git.
 
 Kamailio reads users, trunks, routes, scopes, and dial policies from
 PostgreSQL at request time. Normal changes to `SIPUser`, `SIPTrunk`,
@@ -111,14 +106,13 @@ Services. Component overrides and RTPengine replica overrides take precedence.
 
 KubeVoIP rewrites SIP advertised addresses and RTPengine SDP addresses. Public
 forwarding needs identical public and private UDP ports: SIP `5060` and each
-assigned RTPengine range. Provider load
-balancer behavior, firewall rules, DNS, router forwarding, and trunk
-configuration remain the user's responsibility.
+assigned RTPengine range. The user is responsible for provider load balancers,
+firewall rules, DNS, router forwarding, and trunk configuration.
 
 `Service` and `HostNetwork` media modes are experimental. UDP SIP is the only
-supported transport. TLS, WebRTC, and active-call failover are not included in
-v0.4. A namespace and its dedicated operator release form the supported
-isolation boundary.
+supported transport. TLS, WebRTC, and active-call failover are not included. A
+namespace and its dedicated operator release form the supported isolation
+boundary.
 
 IP-authenticated inbound trunks declare `SIPTrunk.spec.inbound.allowedSourceCidrs`.
 Calls arriving from those networks bypass subscriber authentication and use the
@@ -155,8 +149,7 @@ uv run kopf run kubevoip/main.py --namespace telephony --verbose
 ## Release scope
 
 Releases publish multi-architecture operator, Asterisk, Kamailio, and RTPengine
-images plus the OCI Helm chart. Asterisk 22 LTS, Kamailio 5.6.3, and RTPengine
-10.5.3.5 are pinned for v0.4.
+images plus the OCI Helm chart. The chart pins tested runtime image versions.
 
 Helm leaves CRDs installed on uninstall.
 

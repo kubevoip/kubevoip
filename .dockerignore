@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!pyproject.toml
+!README.md
+!kubevoip/
+!kubevoip/**
+!database/
+!database/**

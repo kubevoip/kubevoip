@@ -341,7 +341,7 @@ def reconcile_sip_trunk_controller(body: dict[str, Any], raw_spec: dict[str, Any
         auth = spec.outbound.authentication
         if auth.mode == "Digest" and auth.digest:
             if not auth.digest.realm:
-                raise InvalidSpecError("Digest authentication requires digest.realm in v0.4")
+                raise InvalidSpecError("Digest authentication requires digest.realm")
             digest_username = kubernetes.read_secret(namespace, auth.digest.username_secret_ref.name, auth.digest.username_secret_ref.key)
             digest_password = kubernetes.read_secret(namespace, auth.digest.password_secret_ref.name, auth.digest.password_secret_ref.key)
             digest_realm = auth.digest.realm

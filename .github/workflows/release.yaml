@@ -107,6 +107,42 @@ jobs:
           else
             gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
           fi
+      - name: Check charts app credentials
+        id: charts-app
+        env:
+          CHARTS_APP_ID: ${{ secrets.CHARTS_APP_ID }}
+          CHARTS_APP_PRIVATE_KEY: ${{ secrets.CHARTS_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "${CHARTS_APP_ID}" ] && [ -n "${CHARTS_APP_PRIVATE_KEY}" ]; then
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            echo "CHARTS_APP_ID or CHARTS_APP_PRIVATE_KEY is not configured; skipping chart repo dispatch."
+          fi
+      - name: Create charts app token
+        id: charts-token
+        if: steps.charts-app.outputs.configured == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CHARTS_APP_ID }}
+          private-key: ${{ secrets.CHARTS_APP_PRIVATE_KEY }}
+          owner: kubevoip
+          repositories: charts
+      - name: Trigger chart bump PR
+        if: steps.charts-app.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.charts-token.outputs.token }}
+        run: |
+          cat > /tmp/charts-dispatch.json <<JSON
+          {
+            "event_type": "platform-release",
+            "client_payload": {
+              "ref": "${GITHUB_REF_NAME}",
+              "version": "${GITHUB_REF_NAME}"
+            }
+          }
+          JSON
+          gh api repos/kubevoip/charts/dispatches --method POST --input /tmp/charts-dispatch.json
       - name: Trigger docs reference refresh
         env:
           GH_TOKEN: ${{ secrets.DOCS_WORKFLOW_TOKEN }}

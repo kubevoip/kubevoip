@@ -12,6 +12,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CRD = ROOT / "config/crd/platform-crds.yaml"
 
+FIELD_SECTIONS = {
+    "SIPGateway": {
+        "observability": "SIPGateway observability",
+    },
+}
+
 
 def schema_type(schema: dict[str, Any]) -> str:
     if "enum" in schema:
@@ -101,10 +107,28 @@ def render_crd(crd: dict[str, Any]) -> str:
         "| --- | --- | --- | --- |",
     ]
 
-    for field, field_type, is_required, field_constraints in render_rows(
+    rows = render_rows(
         spec_schema, parent_required=set(spec_schema.get("required", []))
-    ):
+    )
+    for field, field_type, is_required, field_constraints in rows:
         lines.append(f"| {field} | {field_type} | {is_required} | {field_constraints} |")
+
+    for field_name, title in FIELD_SECTIONS.get(names["kind"], {}).items():
+        prefix = f"`spec.{field_name}"
+        section_rows = [row for row in rows if row[0] == f"`spec.{field_name}`" or row[0].startswith(prefix + ".")]
+        if not section_rows:
+            continue
+        lines.extend(
+            [
+                "",
+                f"### {title}",
+                "",
+                "| Field | Type | Required | Constraints |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for field, field_type, is_required, field_constraints in section_rows:
+            lines.append(f"| {field} | {field_type} | {is_required} | {field_constraints} |")
 
     lines.extend(
         [

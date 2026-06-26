@@ -33,5 +33,8 @@ def test_export_docs_reference_renders_nested_spec_fields() -> None:
 
     assert "`spec.externalAddress.value`" in content
     assert "`spec.gatewayRef.name`" in content
+    assert "### SIPGateway observability" in content
+    assert "`spec.observability.sipHeaders.enabled`" in content
+    assert "`spec.observability.sdp.enabled`" in content
     assert "`spec.trunks`" not in content
     assert "`spec.routes`" not in content

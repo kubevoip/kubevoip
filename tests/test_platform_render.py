@@ -89,13 +89,13 @@ def test_kamailio_homer_capture_is_opt_in():
 
     assert 'loadmodule "siptrace.so"' in rendered
     assert 'modparam("siptrace", "trace_to_database", 0)' in rendered
-    assert 'modparam("siptrace", "trace_flag", 22)' in rendered
+    assert 'modparam("siptrace", "trace_flag"' not in rendered
     assert 'modparam("siptrace", "hep_mode_on", 1)' in rendered
     assert 'modparam("siptrace", "hep_version", 3)' in rendered
     assert 'modparam("siptrace", "duplicate_uri", "sip:homer-heplify.telemetry.svc.cluster.local:9060")' in rendered
-    assert "setflag(22);" in rendered
+    assert "setflag(22);" not in rendered
     assert 'sip_trace_mode("t");' in rendered
-    assert "sip_trace();" in rendered
+    assert "sip_trace();" not in rendered
 
 
 def test_kamailio_homer_capture_supports_dialog_mode():

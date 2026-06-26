@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.6.1] - 2026-06-26
+
+### Fixed
+
+- Avoid duplicate HOMER SIP capture records by relying on Kamailio
+  transaction/dialog capture mode without also setting trace flags or calling
+  immediate `sip_trace()`.
+
 ## [0.6.0] - 2026-06-26
 
 ### Added

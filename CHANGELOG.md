@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.6.7] - 2026-06-26
+
+### Added
+
+- Release workflow dispatch for the new `kubevoip/charts` Helm chart
+  repository, while keeping the platform chart publish path as the migration
+  fallback until the chart repository has proven a full release.
+
 ## [0.6.6] - 2026-06-26
 
 ### Added

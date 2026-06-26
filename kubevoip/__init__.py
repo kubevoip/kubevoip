@@ -1,3 +1,3 @@
 """KubeVoIP operator package."""
 
-__version__ = "0.6.6"
+__version__ = "0.6.7"

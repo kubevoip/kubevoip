@@ -2,6 +2,17 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.6.2] - 2026-06-26
+
+### Added
+
+- Optional `SIPGateway.spec.observability.sipHeaders.enabled` setting to log
+  SIP request and reply headers from Kamailio to stdout with the
+  `kubevoip_sip_headers` marker.
+- Optional `SIPGateway.spec.observability.sdp.enabled` setting to log SDP
+  request and reply bodies from Kamailio to stdout with the
+  `kubevoip_sdp_body` marker.
+
 ## [0.6.1] - 2026-06-26
 
 ### Fixed

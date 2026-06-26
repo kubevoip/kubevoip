@@ -81,7 +81,9 @@ capture = obj(
         {"rule": "!has(self.enabled) || !self.enabled || !has(self.includePayload) || self.includePayload", "message": "HOMER capture requires includePayload=true"}
     ]
 }
-observability = obj({"capture": capture})
+sip_headers = obj({"enabled": {"type": "boolean", "default": False}})
+sdp = obj({"enabled": {"type": "boolean", "default": False}})
+observability = obj({"capture": capture, "sipHeaders": sip_headers, "sdp": sdp})
 status = {"type": "object", "x-kubernetes-preserve-unknown-fields": True}
 
 SPECS = {

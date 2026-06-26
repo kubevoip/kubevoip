@@ -162,8 +162,19 @@ class HomerCaptureSpec(Model):
         return self
 
 
+class SIPHeaderLogSpec(Model):
+    enabled: bool = False
+
+
+class SDPLogSpec(Model):
+    enabled: bool = False
+
+
 class ObservabilitySpec(Model):
     capture: HomerCaptureSpec = Field(default_factory=HomerCaptureSpec)
+    sip_headers: SIPHeaderLogSpec = Field(default_factory=SIPHeaderLogSpec, alias="sipHeaders")
+    sdp: SDPLogSpec = Field(default_factory=SDPLogSpec)
+
 
 
 class DigestAuthentication(Model):

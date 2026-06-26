@@ -115,6 +115,8 @@ def render_kamailio_config(
         namespace=kamailio_string(namespace),
         gateway_name=kamailio_string(gateway_name),
         capture=capture,
+        sip_headers=spec.observability.sip_headers,
+        sdp=spec.observability.sdp,
         capture_mode=capture_mode,
         hep_destination=f"sip:{kamailio_define(capture.hep_address)}:{capture.hep_port}",
         record_route_line=record_route_line,

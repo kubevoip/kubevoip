@@ -33,6 +33,28 @@ def homer_gateway_spec(capture_mode: str = "transaction") -> SIPGatewaySpec:
     )
 
 
+def sip_headers_gateway_spec() -> SIPGatewaySpec:
+    return SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+            "observability": {"sipHeaders": {"enabled": True}},
+        }
+    )
+
+
+def sdp_gateway_spec() -> SIPGatewaySpec:
+    return SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+            "observability": {"sdp": {"enabled": True}},
+        }
+    )
+
+
 def test_kamailio_uses_database_backed_runtime_routing():
     rendered = render_kamailio_config(gateway_spec(), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
 
@@ -63,6 +85,8 @@ def test_kamailio_uses_database_backed_runtime_routing():
     assert "kubevoip_sip_event" in rendered
     assert 'loadmodule "siptrace.so"' not in rendered
     assert "duplicate_uri" not in rendered
+    assert "kubevoip_sip_headers" not in rendered
+    assert "kubevoip_sdp_body" not in rendered
 
 
 def test_kamailio_loads_policy_before_consuming_credentials():
@@ -102,3 +126,21 @@ def test_kamailio_homer_capture_supports_dialog_mode():
     rendered = render_kamailio_config(homer_gateway_spec("dialog"), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
 
     assert 'sip_trace_mode("d");' in rendered
+
+
+def test_kamailio_can_log_sip_headers_to_stdout():
+    rendered = render_kamailio_config(sip_headers_gateway_spec(), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
+
+    assert "kubevoip_sip_headers" in rendered
+    assert "route(LOG_SIP_HEADERS);" in rendered
+    assert "$msg(fline)" in rendered
+    assert "$msg(hdrs)" in rendered
+
+
+def test_kamailio_can_log_sdp_body_to_stdout():
+    rendered = render_kamailio_config(sdp_gateway_spec(), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
+
+    assert "kubevoip_sdp_body" in rendered
+    assert "route(LOG_SDP_BODY);" in rendered
+    assert 'has_body("application/sdp")' in rendered
+    assert "$rb" in rendered

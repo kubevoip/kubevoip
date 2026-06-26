@@ -23,7 +23,7 @@ collectors.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.1 \
+  --version 0.6.2 \
   --namespace telephony --create-namespace
 ```
 
@@ -36,6 +36,10 @@ KubeVoIP gives operators useful logs without requiring a bundled logging stack:
 
 - Kamailio writes safe `kubevoip_sip_event` summary lines for registrations,
   invites, routing decisions, relay failures, and RTPengine offer/answer steps.
+- Kamailio can optionally write raw SIP headers to stdout with the
+  `kubevoip_sip_headers` marker for deep provider troubleshooting.
+- Kamailio can optionally write SDP bodies to stdout with the
+  `kubevoip_sdp_body` marker when SIP messages contain `application/sdp`.
 - RTPengine runs in the foreground with stderr logging and emits a
   `kubevoip_rtp_event` startup line for each media relay replica.
 - Asterisk workers mount an explicit console logger configuration.
@@ -46,6 +50,10 @@ Enable HOMER capture on a gateway by setting `SIPGateway.spec.observability`:
 
 ```yaml
 observability:
+  sipHeaders:
+    enabled: true
+  sdp:
+    enabled: true
   capture:
     enabled: true
     type: Homer
@@ -56,10 +64,12 @@ observability:
     includePayload: true
 ```
 
-HOMER capture is off by default because full SIP and SDP payloads can contain
-caller identity, endpoint addresses, routing metadata, and other sensitive
-customer information. See [Observability](docs/observability.md) for log fields,
-capture modes, and troubleshooting examples.
+SIP header logging, SDP body logging, and HOMER capture are off by default
+because SIP headers, full SIP payloads, and SDP can contain caller identity,
+endpoint addresses, routing metadata, media addresses, authorization headers,
+and other sensitive customer information. See
+[Observability](docs/observability.md) for log fields, capture modes, and
+troubleshooting examples.
 
 ## Quickstart
 
@@ -70,7 +80,7 @@ PostgreSQL database for testing and assumes your cluster can provision UDP
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.1 \
+  --version 0.6.2 \
   --namespace telephony --create-namespace
 
 uvx kubevoip -n telephony init

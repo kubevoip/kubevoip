@@ -54,6 +54,12 @@ request_route {
   sip_trace_mode("{{ capture_mode }}");
 {% endif %}
   xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=request method=$rm call_id=$ci source=$si target=$rU\n");
+{% if sip_headers.enabled %}
+  route(LOG_SIP_HEADERS);
+{% endif %}
+{% if sdp.enabled %}
+  route(LOG_SDP_BODY);
+{% endif %}
   if (!mf_process_maxfwd_header("10")) { send_reply("483", "Too Many Hops"); exit; }
   route(DETECT_TRUSTED_TRUNK);
   if (is_method("BYE|CANCEL")) {
@@ -198,7 +204,27 @@ failure_route[TRUNK_AUTH] {
   }
 }
 
+{% if sip_headers.enabled %}
+route[LOG_SIP_HEADERS] {
+  xlog("L_INFO", "kubevoip_sip_headers namespace={{ namespace }} gateway={{ gateway_name }} direction=$mt method=$rm status=$rs call_id=$ci source=$si first_line=[$msg(fline)] headers=[$msg(hdrs)]\n");
+}
+
+{% endif %}
+{% if sdp.enabled %}
+route[LOG_SDP_BODY] {
+  if (has_body("application/sdp")) {
+    xlog("L_INFO", "kubevoip_sdp_body namespace={{ namespace }} gateway={{ gateway_name }} direction=$mt method=$rm status=$rs call_id=$ci source=$si first_line=[$msg(fline)] body=[$rb]\n");
+  }
+}
+
+{% endif %}
 onreply_route[MANAGE_REPLY] {
+{% if sip_headers.enabled %}
+  route(LOG_SIP_HEADERS);
+{% endif %}
+{% if sdp.enabled %}
+  route(LOG_SDP_BODY);
+{% endif %}
   if (has_body("application/sdp")) {
     xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_answer call_id=$ci status=$rs\n");
     rtpengine_answer("replace-origin replace-session-connection");

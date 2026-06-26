@@ -214,6 +214,30 @@ def test_gateway_homer_capture_validation():
         )
 
 
+def test_gateway_sip_header_logging_validation():
+    spec = SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+            "observability": {"sipHeaders": {"enabled": True}},
+        }
+    )
+    assert spec.observability.sip_headers.enabled is True
+
+
+def test_gateway_sdp_logging_validation():
+    spec = SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+            "observability": {"sdp": {"enabled": True}},
+        }
+    )
+    assert spec.observability.sdp.enabled is True
+
+
 def test_addresses_and_routes_reject_configuration_injection():
     with pytest.raises(ValidationError):
         NetworkProfileSpec.model_validate({"externalAddress": {"value": 'example.com"\nloadmodule "evil.so'}})

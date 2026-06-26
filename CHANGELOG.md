@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.6.3] - 2026-06-26
+
+### Fixed
+
+- Made the release workflow tolerate an existing GitHub release and made
+  integration waits account for operator-created workloads before checking
+  their readiness.
+
 ## [0.6.2] - 2026-06-26
 
 ### Added

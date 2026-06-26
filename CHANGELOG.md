@@ -2,6 +2,13 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.6.5] - 2026-06-26
+
+### Fixed
+
+- Escaped SIP header and SDP line breaks at runtime so
+  `kubevoip_sip_message` is emitted as one physical stdout log line.
+
 ## [0.6.4] - 2026-06-26
 
 ### Changed

@@ -135,7 +135,11 @@ def test_kamailio_can_log_sip_headers_to_stdout():
     assert "kubevoip_sip_message" in rendered
     assert "route(LOG_SIP_MESSAGE);" in rendered
     assert "$msg(fline)" in rendered
-    assert "$(msg(hdrs){s.replace,\\r,\\\\r}{s.replace,\\n,\\\\n})" in rendered
+    assert '$var(cr) = "0d";' in rendered
+    assert "$var(cr) = $(var(cr){s.decode.hexa});" in rendered
+    assert '$var(lf) = "0a";' in rendered
+    assert "$var(lf) = $(var(lf){s.decode.hexa});" in rendered
+    assert "$(msg(hdrs){s.replace,$var(cr),\\\\r}{s.replace,$var(lf),\\\\n})" in rendered
 
 
 def test_kamailio_can_include_sdp_body_in_sip_message_log():
@@ -158,4 +162,4 @@ def test_kamailio_can_include_sdp_body_in_sip_message_log():
     assert "kubevoip_sip_message" in rendered
     assert "route(LOG_SIP_MESSAGE);" in rendered
     assert 'has_body("application/sdp")' in rendered
-    assert "$(rb{s.replace,\\r,\\\\r}{s.replace,\\n,\\\\n})" in rendered
+    assert "$(rb{s.replace,$var(cr),\\\\r}{s.replace,$var(lf),\\\\n})" in rendered

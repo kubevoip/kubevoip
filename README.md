@@ -23,7 +23,7 @@ collectors.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.3 \
+  --version 0.6.4 \
   --namespace telephony --create-namespace
 ```
 
@@ -78,7 +78,7 @@ PostgreSQL database for testing and assumes your cluster can provision UDP
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.3 \
+  --version 0.6.4 \
   --namespace telephony --create-namespace
 
 uvx kubevoip -n telephony init

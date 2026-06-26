@@ -6,6 +6,7 @@
 
 [![Test](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml)
 [![Integration](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kubevoip)](https://artifacthub.io/packages/search?repo=kubevoip)
 
 KubeVoIP is a Kubernetes operator for SIP platforms. It runs Kamailio gateways,
 RTPengine media relays, SIP users, dial policies, provider-neutral trunks, and
@@ -25,7 +26,7 @@ collectors.
 helm repo add kubevoip https://charts.kubevoip.com
 helm repo update
 helm install kubevoip kubevoip/kubevoip \
-  --version 0.6.7 \
+  --version 0.6.8 \
   --namespace telephony --create-namespace
 ```
 
@@ -33,7 +34,7 @@ The same chart is also published to GHCR OCI for existing automation:
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.7 \
+  --version 0.6.8 \
   --namespace telephony --create-namespace
 ```
 
@@ -48,7 +49,7 @@ a time, provided generated priorities do not collide:
 helm repo add kubevoip https://charts.kubevoip.com
 helm repo update
 helm upgrade --install kubevoip kubevoip/kubevoip \
-  --version 0.6.7 \
+  --version 0.6.8 \
   --namespace telephony --create-namespace \
   --set operator.highAvailability.enabled=true \
   --set operator.replicas=3
@@ -109,7 +110,7 @@ PostgreSQL database for testing and assumes your cluster can provision UDP
 helm repo add kubevoip https://charts.kubevoip.com
 helm repo update
 helm install kubevoip kubevoip/kubevoip \
-  --version 0.6.7 \
+  --version 0.6.8 \
   --namespace telephony --create-namespace
 
 uvx kubevoip -n telephony init

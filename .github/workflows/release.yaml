@@ -3,7 +3,9 @@ on:
   push:
     tags: ["v*.*.*"]
 permissions:
+  attestations: write
   contents: write
+  id-token: write
   packages: write
 jobs:
   validate:
@@ -50,7 +52,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v7.2.0
+      - id: build
+        uses: docker/build-push-action@v7.2.0
         with:
           context: .
           file: ${{ matrix.file }}
@@ -60,6 +63,12 @@ jobs:
           no-cache: ${{ matrix.image == 'kubevoip' }}
           cache-from: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }}
           cache-to: type=gha,scope=release-${{ matrix.image }}-${{ matrix.arch }},mode=max
+      - name: Attest architecture image
+        uses: actions/attest-build-provenance@v4.1.0
+        with:
+          subject-name: ghcr.io/kubevoip/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
       - name: Verify operator image contents
         if: matrix.image == 'kubevoip'
         run: |
@@ -84,19 +93,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Create multi-architecture image manifests
+        id: manifest
         run: |
           docker buildx imagetools create \
             --tag "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}" \
             "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}-amd64" \
             "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}-arm64"
+          digest="$(docker buildx imagetools inspect "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}" --format '{{ .Manifest.Digest }}')"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      - name: Attest multi-architecture image
+        uses: actions/attest-build-provenance@v4.1.0
+        with:
+          subject-name: ghcr.io/kubevoip/kubevoip
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v heading="## [$version]" '$0 == heading {found=1; next} /^## \[/ {found=0} found' CHANGELOG.md > release-notes.md
+          awk -v version="$version" '$0 ~ "^## \\[" version "\\]" {found=1; next} /^## \[/ {found=0} found' CHANGELOG.md > release-notes.md
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release edit "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
+            echo "Release ${GITHUB_REF_NAME} already exists; skipping creation"
           else
             gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
           fi
@@ -136,6 +154,42 @@ jobs:
           }
           JSON
           gh api repos/kubevoip/charts/dispatches --method POST --input /tmp/charts-dispatch.json
+      - name: Check CLI app credentials
+        id: cli-app
+        env:
+          CLI_APP_ID: ${{ secrets.CLI_APP_ID }}
+          CLI_APP_PRIVATE_KEY: ${{ secrets.CLI_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "${CLI_APP_ID}" ] && [ -n "${CLI_APP_PRIVATE_KEY}" ]; then
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            echo "CLI_APP_ID or CLI_APP_PRIVATE_KEY is not configured; skipping CLI API sync dispatch."
+          fi
+      - name: Create CLI app token
+        id: cli-token
+        if: steps.cli-app.outputs.configured == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CLI_APP_ID }}
+          private-key: ${{ secrets.CLI_APP_PRIVATE_KEY }}
+          owner: kubevoip
+          repositories: kubevoip-cli
+      - name: Trigger CLI API sync PR
+        if: steps.cli-app.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.cli-token.outputs.token }}
+        run: |
+          cat > /tmp/cli-dispatch.json <<JSON
+          {
+            "event_type": "platform-release",
+            "client_payload": {
+              "ref": "${GITHUB_REF_NAME}",
+              "version": "${GITHUB_REF_NAME}"
+            }
+          }
+          JSON
+          gh api repos/kubevoip/kubevoip-cli/dispatches --method POST --input /tmp/cli-dispatch.json
       - name: Trigger docs reference refresh
         env:
           GH_TOKEN: ${{ secrets.DOCS_WORKFLOW_TOKEN }}

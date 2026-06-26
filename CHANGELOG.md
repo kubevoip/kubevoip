@@ -4,11 +4,16 @@ All notable changes to KubeVoIP are documented in this file.
 
 ## Unreleased
 
+## [0.6.8] - 2026-06-26
+
 ### Changed
 
 - Moved platform Helm chart source and chart publishing ownership to
   `kubevoip/charts`; this repository now publishes only the operator image and
   dispatches the reviewed chart release flow.
+- Added Artifact Hub discovery metadata and a PNG logo asset for chart listing
+  compatibility.
+- Added release dispatch support for the CLI API sync workflow.
 
 ## [0.6.7] - 2026-06-26
 

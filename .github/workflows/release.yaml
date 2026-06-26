@@ -136,6 +136,42 @@ jobs:
           }
           JSON
           gh api repos/kubevoip/charts/dispatches --method POST --input /tmp/charts-dispatch.json
+      - name: Check CLI app credentials
+        id: cli-app
+        env:
+          CLI_APP_ID: ${{ secrets.CLI_APP_ID }}
+          CLI_APP_PRIVATE_KEY: ${{ secrets.CLI_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "${CLI_APP_ID}" ] && [ -n "${CLI_APP_PRIVATE_KEY}" ]; then
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            echo "CLI_APP_ID or CLI_APP_PRIVATE_KEY is not configured; skipping CLI API sync dispatch."
+          fi
+      - name: Create CLI app token
+        id: cli-token
+        if: steps.cli-app.outputs.configured == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CLI_APP_ID }}
+          private-key: ${{ secrets.CLI_APP_PRIVATE_KEY }}
+          owner: kubevoip
+          repositories: kubevoip-cli
+      - name: Trigger CLI API sync PR
+        if: steps.cli-app.outputs.configured == 'true'
+        env:
+          GH_TOKEN: ${{ steps.cli-token.outputs.token }}
+        run: |
+          cat > /tmp/cli-dispatch.json <<JSON
+          {
+            "event_type": "platform-release",
+            "client_payload": {
+              "ref": "${GITHUB_REF_NAME}",
+              "version": "${GITHUB_REF_NAME}"
+            }
+          }
+          JSON
+          gh api repos/kubevoip/kubevoip-cli/dispatches --method POST --input /tmp/cli-dispatch.json
       - name: Trigger docs reference refresh
         env:
           GH_TOKEN: ${{ secrets.DOCS_WORKFLOW_TOKEN }}

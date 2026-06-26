@@ -13,8 +13,6 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
       - run: uv sync --extra dev
       - run: uv run ruff check . && uv run pytest
-      - uses: azure/setup-helm@v5
-      - run: helm lint charts/kubevoip && helm template kubevoip charts/kubevoip >/dev/null
       - name: Validate CRD on Kubernetes
         uses: helm/kind-action@v1
       - run: kubectl apply --dry-run=server -f config/crd/platform-crds.yaml
@@ -91,11 +89,6 @@ jobs:
             --tag "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}" \
             "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}-amd64" \
             "ghcr.io/kubevoip/kubevoip:${GITHUB_REF_NAME}-arm64"
-      - uses: azure/setup-helm@v5
-      - run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
-          helm package charts/kubevoip
-          helm push "kubevoip-${GITHUB_REF_NAME#v}.tgz" oci://ghcr.io/kubevoip/charts
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

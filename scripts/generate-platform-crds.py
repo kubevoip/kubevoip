@@ -6,10 +6,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).parents[1]
-OUTPUTS = (
-    ROOT / "config/crd/platform-crds.yaml",
-    ROOT / "charts/kubevoip/crds/platform-crds.yaml",
-)
+OUTPUTS = (ROOT / "config/crd/platform-crds.yaml",)
 
 
 def obj(properties, required=()):

@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Moved platform Helm chart source and chart publishing ownership to
+  `kubevoip/charts`; this repository now publishes only the operator image and
+  dispatches the reviewed chart release flow.
+
 ## [0.6.7] - 2026-06-26
 
 ### Added

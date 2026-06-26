@@ -55,10 +55,7 @@ request_route {
 {% endif %}
   xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=request method=$rm call_id=$ci source=$si target=$rU\n");
 {% if sip_headers.enabled %}
-  route(LOG_SIP_HEADERS);
-{% endif %}
-{% if sdp.enabled %}
-  route(LOG_SDP_BODY);
+  route(LOG_SIP_MESSAGE);
 {% endif %}
   if (!mf_process_maxfwd_header("10")) { send_reply("483", "Too Many Hops"); exit; }
   route(DETECT_TRUSTED_TRUNK);
@@ -205,25 +202,23 @@ failure_route[TRUNK_AUTH] {
 }
 
 {% if sip_headers.enabled %}
-route[LOG_SIP_HEADERS] {
-  xlog("L_INFO", "kubevoip_sip_headers namespace={{ namespace }} gateway={{ gateway_name }} direction=$mt method=$rm status=$rs call_id=$ci source=$si first_line=[$msg(fline)] headers=[$msg(hdrs)]\n");
-}
-
-{% endif %}
+route[LOG_SIP_MESSAGE] {
+  $var(headers) = $(msg(hdrs){s.replace,\r,\\r}{s.replace,\n,\\n});
 {% if sdp.enabled %}
-route[LOG_SDP_BODY] {
+  $var(sdp) = "";
   if (has_body("application/sdp")) {
-    xlog("L_INFO", "kubevoip_sdp_body namespace={{ namespace }} gateway={{ gateway_name }} direction=$mt method=$rm status=$rs call_id=$ci source=$si first_line=[$msg(fline)] body=[$rb]\n");
+    $var(sdp) = $(rb{s.replace,\r,\\r}{s.replace,\n,\\n});
   }
+  xlog("L_INFO", "kubevoip_sip_message namespace={{ namespace }} gateway={{ gateway_name }} direction=$mt method=$rm status=$rs call_id=$ci source=$si first_line=[$msg(fline)] headers=[$var(headers)] sdp=[$var(sdp)]\n");
+{% else %}
+  xlog("L_INFO", "kubevoip_sip_message namespace={{ namespace }} gateway={{ gateway_name }} direction=$mt method=$rm status=$rs call_id=$ci source=$si first_line=[$msg(fline)] headers=[$var(headers)] sdp=[]\n");
+{% endif %}
 }
 
 {% endif %}
 onreply_route[MANAGE_REPLY] {
 {% if sip_headers.enabled %}
-  route(LOG_SIP_HEADERS);
-{% endif %}
-{% if sdp.enabled %}
-  route(LOG_SDP_BODY);
+  route(LOG_SIP_MESSAGE);
 {% endif %}
   if (has_body("application/sdp")) {
     xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_answer call_id=$ci status=$rs\n");

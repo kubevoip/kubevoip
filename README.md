@@ -36,10 +36,8 @@ KubeVoIP gives operators useful logs without requiring a bundled logging stack:
 
 - Kamailio writes safe `kubevoip_sip_event` summary lines for registrations,
   invites, routing decisions, relay failures, and RTPengine offer/answer steps.
-- Kamailio can optionally write raw SIP headers to stdout with the
-  `kubevoip_sip_headers` marker for deep provider troubleshooting.
-- Kamailio can optionally write SDP bodies to stdout with the
-  `kubevoip_sdp_body` marker when SIP messages contain `application/sdp`.
+- Kamailio can optionally write raw SIP headers and SDP bodies to stdout with
+  the `kubevoip_sip_message` marker for deep provider troubleshooting.
 - RTPengine runs in the foreground with stderr logging and emits a
   `kubevoip_rtp_event` startup line for each media relay replica.
 - Asterisk workers mount an explicit console logger configuration.

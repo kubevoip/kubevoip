@@ -44,12 +44,12 @@ kubectl -n telephony logs deploy/main-sip-gateway -c kamailio \
   | grep kubevoip_sip_event
 ```
 
-## SIP header logs
+## SIP message logs
 
-For provider troubleshooting, Kamailio can also log SIP request and reply
-headers to stdout with the `kubevoip_sip_headers` marker. This is useful when
-you need provider-specific headers such as call identifiers, trunk diagnostics,
-or routing metadata in your existing log backend.
+For provider and media troubleshooting, Kamailio can also log SIP request and
+reply headers to stdout with the `kubevoip_sip_message` marker. When
+`observability.sdp.enabled` is also true and the message has
+`Content-Type: application/sdp`, the same log line includes the SDP body.
 
 Example `SIPGateway` configuration:
 
@@ -68,59 +68,22 @@ spec:
   observability:
     sipHeaders:
       enabled: true
-```
-
-Header logs are disabled by default. When enabled, Kamailio emits the SIP first
-line and headers for requests and replies, without the SIP body or SDP:
-
-```text
-kubevoip_sip_headers namespace=telephony gateway=main direction=... method=INVITE status=... call_id=... source=203.0.113.20 first_line=[...] headers=[...]
-```
-
-To search for a provider Call SID in Kubernetes logs:
-
-```bash
-kubectl -n telephony logs deploy/main-sip-gateway -c kamailio \
-  | grep -E 'kubevoip_sip_headers|X-Twilio|CallSid|Call-Sid|CA[0-9a-fA-F]{32}'
-```
-
-## SDP body logs
-
-SDP is carried in the SIP message body rather than in SIP headers. For media
-troubleshooting, Kamailio can log SDP bodies from SIP requests and replies with
-the `kubevoip_sdp_body` marker whenever the message has
-`Content-Type: application/sdp`.
-
-Example `SIPGateway` configuration:
-
-```yaml
-apiVersion: kubevoip.com/v1alpha1
-kind: SIPGateway
-metadata:
-  name: home
-spec:
-  databaseSecretRef:
-    name: kubevoip-db
-  networkProfileRef:
-    name: public
-  mediaRelayRef:
-    name: home
-  observability:
     sdp:
       enabled: true
 ```
 
-Example log marker:
+Raw SIP headers and SDP contain newlines. KubeVoIP escapes those newlines before
+logging so each SIP message is one container log record and one Loki row:
 
 ```text
-kubevoip_sdp_body namespace=telephony gateway=main direction=... method=INVITE status=... call_id=... source=203.0.113.20 first_line=[...] body=[v=0...]
+kubevoip_sip_message namespace=telephony gateway=main direction=... method=INVITE status=183 call_id=... source=203.0.113.20 first_line=[...] headers=[CSeq: ...\r\nCall-ID: ...\r\nX-Twilio-CallSid: ...] sdp=[v=0\r\ns=...\r\nm=audio ...]
 ```
 
-To search for SDP bodies in Kubernetes logs:
+To search for a provider Call SID or SDP in Kubernetes logs:
 
 ```bash
 kubectl -n telephony logs deploy/main-sip-gateway -c kamailio \
-  | grep kubevoip_sdp_body
+  | grep -E 'kubevoip_sip_message|X-Twilio|CallSid|Call-Sid|CA[0-9a-fA-F]{32}|m=audio'
 ```
 
 ## HOMER and HEP capture

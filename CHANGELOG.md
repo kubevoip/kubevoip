@@ -2,6 +2,14 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## Unreleased
+
+### Changed
+
+- SIP header and SDP body logging now emits one single-line
+  `kubevoip_sip_message` event per SIP message, with escaped headers and SDP in
+  the same log row for better Loki searchability.
+
 ## [0.6.3] - 2026-06-26
 
 ### Fixed

@@ -94,7 +94,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          awk -v heading="## [$version]" '$0 == heading {found=1; next} /^## \[/ {found=0} found' CHANGELOG.md > release-notes.md
+          awk -v version="$version" '$0 ~ "^## \\[" version "\\]" {found=1; next} /^## \[/ {found=0} found' CHANGELOG.md > release-notes.md
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release edit "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
           else

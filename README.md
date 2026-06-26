@@ -6,6 +6,7 @@
 
 [![Test](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/test.yaml)
 [![Integration](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml/badge.svg)](https://github.com/kubevoip/kubevoip/actions/workflows/integration.yaml)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/kubevoip)](https://artifacthub.io/packages/search?repo=kubevoip)
 
 KubeVoIP is a Kubernetes operator for SIP platforms. It runs Kamailio gateways,
 RTPengine media relays, SIP users, dial policies, provider-neutral trunks, and

@@ -144,6 +144,28 @@ class DatabaseSecretRef(Model):
     name: str = Field(min_length=1)
 
 
+class HomerCaptureSpec(Model):
+    enabled: bool = False
+    type: Literal["Homer"] = "Homer"
+    hep_address: str = Field(default="homer-heplify.telemetry.svc.cluster.local", alias="hepAddress", min_length=1, max_length=253)
+    hep_port: int = Field(default=9060, alias="hepPort", ge=1, le=65535)
+    hep_transport: Literal["udp"] = Field(default="udp", alias="hepTransport")
+    capture_mode: Literal["transaction", "dialog"] = Field(default="transaction", alias="captureMode")
+    include_payload: bool = Field(default=True, alias="includePayload")
+
+    _validate_hep_address = field_validator("hep_address")(validate_external_address)
+
+    @model_validator(mode="after")
+    def validate_payload(self) -> "HomerCaptureSpec":
+        if self.enabled and not self.include_payload:
+            raise ValueError("HOMER capture requires includePayload=true")
+        return self
+
+
+class ObservabilitySpec(Model):
+    capture: HomerCaptureSpec = Field(default_factory=HomerCaptureSpec)
+
+
 class DigestAuthentication(Model):
     username_secret_ref: SecretKeyRef = Field(alias="usernameSecretRef")
     password_secret_ref: SecretKeyRef = Field(alias="passwordSecretRef")
@@ -242,6 +264,7 @@ class SIPGatewaySpec(Model):
     external_address: str | None = Field(default=None, alias="externalAddress", min_length=1)
     internal_address: str | None = Field(default=None, alias="internalAddress", min_length=1)
     service: ServiceSpec = Field(default_factory=ServiceSpec)
+    observability: ObservabilitySpec = Field(default_factory=ObservabilitySpec)
 
     _validate_address = field_validator("external_address")(validate_external_address)
     _validate_internal_address = field_validator("internal_address")(validate_external_address)

@@ -129,7 +129,9 @@ def build_media_relay_resources(
         service_name = f"{name}-rtpengine-{index}"
         command = f"""advertised="$(getent ahostsv4 "$EXTERNAL_ADDRESS" | awk 'NR == 1 {{ print $1 }}')"
 test -n "$advertised"
+echo "kubevoip_rtp_event component=rtpengine service={service_name} advertised=$advertised pod_ip=$POD_IP port_min={start} port_max={end}"
 exec rtpengine --foreground --log-stderr --table=-1 \
+  --log-level=6 --split-logs \
   --interface="$POD_IP!$advertised" --listen-ng=0.0.0.0:2223 \
   --port-min={start} --port-max={end}
 """

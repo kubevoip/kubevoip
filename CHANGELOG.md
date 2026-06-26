@@ -2,6 +2,26 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.6.0] - 2026-06-26
+
+### Added
+
+- Optional `SIPGateway.spec.observability.capture` settings for HOMER/HEP
+  SIP capture export from Kamailio.
+- Safe Kamailio `kubevoip_sip_event` summary logs for SIP request,
+  authentication, routing, and RTPengine offer/answer/delete stages.
+- RTPengine startup and session activity logging guidance through container
+  stdout/stderr.
+- Explicit Asterisk console logger configuration.
+- Operator and user documentation for vendor-neutral SIP/RTP observability.
+
+### Changed
+
+- Kamailio configuration now loads `siptrace` only when HOMER capture is
+  enabled and keeps stdout summary logs enabled either way.
+- The platform chart now pins the operator image to `v0.6.0`; split runtime
+  images remain on the current `v0.5.0` component releases.
+
 ## [0.5.0] - 2026-06-18
 
 ### Added

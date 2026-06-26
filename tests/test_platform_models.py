@@ -181,6 +181,39 @@ def test_gateway_service_validation_remains_provider_neutral():
         )
 
 
+def test_gateway_homer_capture_validation():
+    spec = SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+            "observability": {"capture": {"enabled": True, "hepAddress": "homer.telemetry.svc", "captureMode": "dialog"}},
+        }
+    )
+    assert spec.observability.capture.enabled is True
+    assert spec.observability.capture.type == "Homer"
+    assert spec.observability.capture.hep_port == 9060
+    assert spec.observability.capture.capture_mode == "dialog"
+    with pytest.raises(ValidationError):
+        SIPGatewaySpec.model_validate(
+            {
+                "databaseSecretRef": {"name": "db"},
+                "networkProfileRef": {"name": "public"},
+                "mediaRelayRef": {"name": "home"},
+                "observability": {"capture": {"enabled": True, "hepPort": 0}},
+            }
+        )
+    with pytest.raises(ValidationError):
+        SIPGatewaySpec.model_validate(
+            {
+                "databaseSecretRef": {"name": "db"},
+                "networkProfileRef": {"name": "public"},
+                "mediaRelayRef": {"name": "home"},
+                "observability": {"capture": {"enabled": True, "includePayload": False}},
+            }
+        )
+
+
 def test_addresses_and_routes_reject_configuration_injection():
     with pytest.raises(ValidationError):
         NetworkProfileSpec.model_validate({"externalAddress": {"value": 'example.com"\nloadmodule "evil.so'}})

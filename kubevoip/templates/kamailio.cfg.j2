@@ -6,6 +6,8 @@
 #!define KUBEVOIP_NAMESPACE "{{ namespace }}"
 #!define KUBEVOIP_GATEWAY "{{ gateway_name }}"
 auto_aliases=no
+log_stderror=yes
+debug=2
 alias=ADVERTISED_ADDR:5060
 alias=INTERNAL_ADDR:5060
 listen=udp:0.0.0.0:5060 advertise ADVERTISED_ADDR:5060
@@ -25,6 +27,10 @@ loadmodule "sqlops.so"
 loadmodule "uac.so"
 loadmodule "dialog.so"
 loadmodule "rtpengine.so"
+loadmodule "xlog.so"
+{% if capture.enabled %}
+loadmodule "siptrace.so"
+{% endif %}
 modparam("usrloc", "db_mode", 3)
 modparam("usrloc", "db_url", "__DBURL__")
 modparam("auth_db", "db_url", "__DBURL__")
@@ -35,30 +41,68 @@ modparam("uac", "auth_password_avp", "$avp(apass)")
 modparam("uac", "auth_realm_avp", "$avp(arealm)")
 modparam("rtpengine", "rtpengine_sock", RTPENGINE_SOCKETS)
 modparam("sqlops", "sqlcon", "kubevoip=>__DBURL__")
+{% if capture.enabled %}
+modparam("siptrace", "trace_on", 1)
+modparam("siptrace", "trace_to_database", 0)
+modparam("siptrace", "trace_flag", 22)
+modparam("siptrace", "hep_mode_on", 1)
+modparam("siptrace", "hep_version", 3)
+modparam("siptrace", "duplicate_uri", "{{ hep_destination }}")
+{% endif %}
 
 request_route {
+{% if capture.enabled %}
+  setflag(22);
+  sip_trace_mode("{{ capture_mode }}");
+  sip_trace();
+{% endif %}
+  xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=request method=$rm call_id=$ci source=$si target=$rU\n");
   if (!mf_process_maxfwd_header("10")) { send_reply("483", "Too Many Hops"); exit; }
   route(DETECT_TRUSTED_TRUNK);
-  if (is_method("BYE|CANCEL")) { rtpengine_delete(); }
+  if (is_method("BYE|CANCEL")) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_delete method=$rm call_id=$ci source=$si\n");
+    rtpengine_delete();
+  }
   if (has_totag()) {
     if (loose_route()) { route(RELAY); exit; }
     if (is_method("ACK")) { exit; }
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=dialog_not_found method=$rm call_id=$ci source=$si\n");
     send_reply("404", "Dialog not found");
     exit;
   }
   if (is_method("REGISTER")) {
-    if (!www_authorize(AUTH_REALM, "subscriber")) { www_challenge(AUTH_REALM, "0"); exit; }
+    if (!www_authorize(AUTH_REALM, "subscriber")) {
+      xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=register_challenge call_id=$ci source=$si\n");
+      www_challenge(AUTH_REALM, "0");
+      exit;
+    }
     save("location");
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=register_saved call_id=$ci source=$si user=$aU\n");
     exit;
   }
   if (is_method("INVITE") && !isflagset(1)) {
-    if (!proxy_authorize(AUTH_REALM, "subscriber")) { proxy_challenge(AUTH_REALM, "0"); exit; }
+    if (!proxy_authorize(AUTH_REALM, "subscriber")) {
+      xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=invite_challenge call_id=$ci source=$si target=$rU\n");
+      proxy_challenge(AUTH_REALM, "0");
+      exit;
+    }
     route(LOAD_AUTHENTICATED_POLICY);
     consume_credentials();
   }
-  if (is_method("INVITE") && $avp(caller_policy) == $null) { send_reply("403", "No dial policy"); exit; }
-  if (!($rU =~ "^[+0-9.*]+$")) { send_reply("404", "No route"); exit; }
-  if (has_body("application/sdp")) { rtpengine_offer("replace-origin replace-session-connection"); }
+  if (is_method("INVITE") && $avp(caller_policy) == $null) {
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=no_dial_policy call_id=$ci source=$si target=$rU\n");
+    send_reply("403", "No dial policy");
+    exit;
+  }
+  if (!($rU =~ "^[+0-9.*]+$")) {
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=invalid_target call_id=$ci source=$si target=$rU\n");
+    send_reply("404", "No route");
+    exit;
+  }
+  if (has_body("application/sdp")) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_offer call_id=$ci source=$si target=$rU\n");
+    rtpengine_offer("replace-origin replace-session-connection");
+  }
   if (is_method("INVITE")) { dlg_manage(); {{ record_route_line }} }
   route(ROUTE_INVITE);
   exit;
@@ -70,6 +114,7 @@ route[DETECT_TRUSTED_TRUNK] {
   if ($dbr(trusted=>rows) > 0) {
     setflag(1);
     $avp(caller_policy) = $dbr(trusted=>[0,1]);
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=trusted_trunk_matched call_id=$ci source=$si\n");
   }
   sql_result_free("trusted");
 }
@@ -79,6 +124,7 @@ route[LOAD_AUTHENTICATED_POLICY] {
   sql_query("kubevoip", "$var(caller_query)", "caller");
   if ($dbr(caller=>rows) > 0) {
     $avp(caller_policy) = $dbr(caller=>[0,0]);
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=authenticated_policy_loaded call_id=$ci source=$si user=$aU\n");
   }
   sql_result_free("caller");
 }
@@ -88,10 +134,12 @@ route[ROUTE_INVITE] {
   sql_query("kubevoip", "$var(route_query)", "route");
   if ($dbr(route=>rows) == 0) {
     sql_result_free("route");
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=no_permitted_route call_id=$ci source=$si target=$rU\n");
     send_reply("403", "No permitted route");
     exit;
   }
   $avp(target_kind) = $dbr(route=>[0,0]);
+  xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=route_selected call_id=$ci source=$si target=$rU target_kind=$avp(target_kind)\n");
   if ($avp(target_kind) == "SIPUser") {
     $rU = $dbr(route=>[0,4]);
     sql_result_free("route");
@@ -121,30 +169,41 @@ route[ROUTE_INVITE] {
     exit;
   }
   sql_result_free("route");
+  xlog("L_ERR", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=unsupported_route_target call_id=$ci target_kind=$avp(target_kind)\n");
   send_reply("500", "Unsupported route target");
   exit;
 }
 
 route[RELAY] {
   t_on_reply("MANAGE_REPLY");
-  if (!t_relay()) { sl_reply_error(); }
+  if (!t_relay()) {
+    xlog("L_ERR", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=relay_failed call_id=$ci method=$rm target=$rU\n");
+    sl_reply_error();
+  }
   exit;
 }
 
 route[RELAY_TRUNK] {
   t_on_reply("MANAGE_REPLY");
   t_on_failure("TRUNK_AUTH");
-  if (!t_relay()) { sl_reply_error(); }
+  if (!t_relay()) {
+    xlog("L_ERR", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=trunk_relay_failed call_id=$ci method=$rm target=$rU\n");
+    sl_reply_error();
+  }
   exit;
 }
 
 failure_route[TRUNK_AUTH] {
   if (t_is_canceled()) { exit; }
   if (t_check_status("401|407") && $avp(auser) != "" && $avp(apass) != "") {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=trunk_auth_retry call_id=$ci\n");
     if (uac_auth_mode("1")) { t_relay(); exit; }
   }
 }
 
 onreply_route[MANAGE_REPLY] {
-  if (has_body("application/sdp")) { rtpengine_answer("replace-origin replace-session-connection"); }
+  if (has_body("application/sdp")) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_answer call_id=$ci status=$rs\n");
+    rtpengine_answer("replace-origin replace-session-connection");
+  }
 }

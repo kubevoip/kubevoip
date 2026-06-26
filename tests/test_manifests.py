@@ -59,6 +59,7 @@ def test_operator_package_includes_render_templates():
     assert (root / "kubevoip/templates/asterisk/pjsip.conf.j2").exists()
     assert (root / "kubevoip/templates/asterisk/extensions.conf.j2").exists()
     assert (root / "kubevoip/templates/asterisk/rtp.conf.j2").exists()
+    assert (root / "kubevoip/templates/asterisk/logger.conf.j2").exists()
 
 
 def test_discovery_rbac_names_include_release_namespace():

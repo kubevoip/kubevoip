@@ -32,11 +32,16 @@ def render_worker_configs(spec: AsteriskPoolSpec) -> dict[str, str]:
         "pjsip.conf": render_template("asterisk/pjsip.conf.j2"),
         "extensions.conf": render_template("asterisk/extensions.conf.j2", echo_extension=spec.applications.echo_extension),
         "rtp.conf": render_template("asterisk/rtp.conf.j2"),
+        "logger.conf": render_template("asterisk/logger.conf.j2"),
     }
 
 
 def kamailio_string(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def kamailio_define(value: str) -> str:
+    return kamailio_string(value)
 
 
 def render_kamailio_config(
@@ -50,6 +55,8 @@ def render_kamailio_config(
     relay_sockets = " ".join(relay_endpoints)
     external_record_route = kamailio_string(external_address)
     internal_record_route = kamailio_string(internal_address)
+    capture = spec.observability.capture
+    capture_mode = {"transaction": "t", "dialog": "d"}[capture.capture_mode]
     if internal_address == external_address:
         record_route_line = "record_route();"
     else:
@@ -107,6 +114,9 @@ def render_kamailio_config(
         relay_sockets=relay_sockets,
         namespace=kamailio_string(namespace),
         gateway_name=kamailio_string(gateway_name),
+        capture=capture,
+        capture_mode=capture_mode,
+        hep_destination=f"sip:{kamailio_define(capture.hep_address)}:{capture.hep_port}",
         record_route_line=record_route_line,
         trusted_query_prefix=trusted_query_prefix,
         trusted_query_suffix=trusted_query_suffix,

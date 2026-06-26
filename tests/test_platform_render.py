@@ -12,6 +12,27 @@ def gateway_spec() -> SIPGatewaySpec:
     )
 
 
+def homer_gateway_spec(capture_mode: str = "transaction") -> SIPGatewaySpec:
+    return SIPGatewaySpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "networkProfileRef": {"name": "public"},
+            "mediaRelayRef": {"name": "home"},
+            "observability": {
+                "capture": {
+                    "enabled": True,
+                    "type": "Homer",
+                    "hepAddress": "homer-heplify.telemetry.svc.cluster.local",
+                    "hepPort": 9060,
+                    "hepTransport": "udp",
+                    "captureMode": capture_mode,
+                    "includePayload": True,
+                }
+            },
+        }
+    )
+
+
 def test_kamailio_uses_database_backed_runtime_routing():
     rendered = render_kamailio_config(gateway_spec(), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
 
@@ -37,6 +58,11 @@ def test_kamailio_uses_database_backed_runtime_routing():
     assert "namespace='test'" in rendered
     assert "gateway_name='home'" in rendered
     assert "namespace='KUBEVOIP_NAMESPACE'" not in rendered
+    assert "log_stderror=yes" in rendered
+    assert 'loadmodule "xlog.so"' in rendered
+    assert "kubevoip_sip_event" in rendered
+    assert 'loadmodule "siptrace.so"' not in rendered
+    assert "duplicate_uri" not in rendered
 
 
 def test_kamailio_loads_policy_before_consuming_credentials():
@@ -56,3 +82,23 @@ def test_kamailio_uses_single_record_route_when_addresses_match():
     rendered = render_kamailio_config(gateway_spec(), "home", "test", "198.51.100.10", "198.51.100.10", ["udp:rtpengine:2223"])
     assert "record_route();" in rendered
     assert "record_route_preset" not in rendered
+
+
+def test_kamailio_homer_capture_is_opt_in():
+    rendered = render_kamailio_config(homer_gateway_spec(), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
+
+    assert 'loadmodule "siptrace.so"' in rendered
+    assert 'modparam("siptrace", "trace_to_database", 0)' in rendered
+    assert 'modparam("siptrace", "trace_flag", 22)' in rendered
+    assert 'modparam("siptrace", "hep_mode_on", 1)' in rendered
+    assert 'modparam("siptrace", "hep_version", 3)' in rendered
+    assert 'modparam("siptrace", "duplicate_uri", "sip:homer-heplify.telemetry.svc.cluster.local:9060")' in rendered
+    assert "setflag(22);" in rendered
+    assert 'sip_trace_mode("t");' in rendered
+    assert "sip_trace();" in rendered
+
+
+def test_kamailio_homer_capture_supports_dialog_mode():
+    rendered = render_kamailio_config(homer_gateway_spec("dialog"), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
+
+    assert 'sip_trace_mode("d");' in rendered

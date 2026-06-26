@@ -640,6 +640,48 @@ spec:
                     type: object
                     additionalProperties:
                       type: string
+              observability:
+                type: object
+                properties:
+                  capture:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: false
+                      type:
+                        type: string
+                        enum:
+                        - Homer
+                        default: Homer
+                      hepAddress:
+                        type: string
+                        minLength: 1
+                        maxLength: 253
+                        default: homer-heplify.telemetry.svc.cluster.local
+                      hepPort:
+                        type: integer
+                        minimum: 1
+                        maximum: 65535
+                        default: 9060
+                      hepTransport:
+                        type: string
+                        enum:
+                        - udp
+                        default: udp
+                      captureMode:
+                        type: string
+                        enum:
+                        - transaction
+                        - dialog
+                        default: transaction
+                      includePayload:
+                        type: boolean
+                        default: true
+                    x-kubernetes-validations:
+                    - rule: '!has(self.enabled) || !self.enabled || !has(self.includePayload)
+                        || self.includePayload'
+                      message: HOMER capture requires includePayload=true
             required:
             - databaseSecretRef
             - networkProfileRef

@@ -9,7 +9,10 @@
 
 KubeVoIP is a Kubernetes operator for SIP platforms. It runs Kamailio gateways,
 RTPengine media relays, SIP users, dial policies, provider-neutral trunks, and
-Asterisk application pods, with runtime data stored in PostgreSQL.
+Asterisk application pods, with runtime data stored in PostgreSQL. Managed
+workloads emit vendor-neutral SIP/RTP logs to Kubernetes container streams, and
+SIP gateways can optionally export HEP capture traffic to HOMER-compatible
+collectors.
 
 - Website: [kubevoip.com](https://kubevoip.com)
 - Documentation: [docs.kubevoip.com](https://docs.kubevoip.com)
@@ -20,12 +23,43 @@ Asterisk application pods, with runtime data stored in PostgreSQL.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.5.0 \
+  --version 0.6.0 \
   --namespace telephony --create-namespace
 ```
 
 Each Helm release watches only its installation namespace. CRDs remain
 cluster-scoped Kubernetes resources shared by all releases.
+
+## Observability
+
+KubeVoIP gives operators useful logs without requiring a bundled logging stack:
+
+- Kamailio writes safe `kubevoip_sip_event` summary lines for registrations,
+  invites, routing decisions, relay failures, and RTPengine offer/answer steps.
+- RTPengine runs in the foreground with stderr logging and emits a
+  `kubevoip_rtp_event` startup line for each media relay replica.
+- Asterisk workers mount an explicit console logger configuration.
+- Optional HOMER support sends SIP capture traffic from Kamailio to a
+  user-owned HOMER, heplify-server, or HEP-compatible collector.
+
+Enable HOMER capture on a gateway by setting `SIPGateway.spec.observability`:
+
+```yaml
+observability:
+  capture:
+    enabled: true
+    type: Homer
+    hepAddress: homer-heplify.telemetry.svc.cluster.local
+    hepPort: 9060
+    hepTransport: udp
+    captureMode: transaction
+    includePayload: true
+```
+
+HOMER capture is off by default because full SIP and SDP payloads can contain
+caller identity, endpoint addresses, routing metadata, and other sensitive
+customer information. See [Observability](docs/observability.md) for log fields,
+capture modes, and troubleshooting examples.
 
 ## Quickstart
 
@@ -36,7 +70,7 @@ PostgreSQL database for testing and assumes your cluster can provision UDP
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.5.0 \
+  --version 0.6.0 \
   --namespace telephony --create-namespace
 
 uvx kubevoip -n telephony init
@@ -77,6 +111,7 @@ database guidance, see the [KubeVoIP documentation](https://docs.kubevoip.com).
 - [Getting started](https://docs.kubevoip.com/getting-started/quickstart/)
 - [Concepts](https://docs.kubevoip.com/concepts/platform-resources/)
 - [Networking](https://docs.kubevoip.com/networking/sip-on-kubernetes/)
+- [Observability](docs/observability.md)
 - [Operations](https://docs.kubevoip.com/operations/postgresql/)
 - [API reference](https://docs.kubevoip.com/reference/api/)
 - [Contributing](CONTRIBUTING.md)

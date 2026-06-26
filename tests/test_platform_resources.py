@@ -47,6 +47,10 @@ def test_media_relay_builds_stable_service_per_replica():
     assert [item["metadata"]["name"] for item in services] == ["home-rtpengine-0", "home-rtpengine-1"]
     assert [port["port"] for port in services[0]["spec"]["ports"]] == [2223, 20000, 20001]
     assert "--table=-1" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    assert "--log-stderr" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    assert "--log-level=6" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    assert "--split-logs" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    assert "kubevoip_rtp_event" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
 
 
 def test_media_relay_prefers_spreading_replicas_across_nodes():
@@ -138,3 +142,10 @@ def test_asterisk_pool_uses_private_service_and_headless_identity():
     assert statefulset["spec"]["serviceName"] == "apps-asterisk-pool-headless"
     assert statefulset["spec"]["replicas"] == 2
     assert "kubevoip.com/config-hash" in statefulset["spec"]["template"]["metadata"]["annotations"]
+    secret = next(item for item in resources if item["kind"] == "Secret")
+    assert "logger.conf" in secret["data"]
+    mounted = {
+        mount["subPath"]
+        for mount in statefulset["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+    }
+    assert "logger.conf" in mounted

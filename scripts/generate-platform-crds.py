@@ -66,6 +66,22 @@ service = obj(
         "annotations": {"type": "object", "additionalProperties": string()},
     }
 )
+capture = obj(
+    {
+        "enabled": {"type": "boolean", "default": False},
+        "type": string(enum=["Homer"], default="Homer"),
+        "hepAddress": string(minLength=1, maxLength=253, default="homer-heplify.telemetry.svc.cluster.local"),
+        "hepPort": integer(minimum=1, maximum=65535, default=9060),
+        "hepTransport": string(enum=["udp"], default="udp"),
+        "captureMode": string(enum=["transaction", "dialog"], default="transaction"),
+        "includePayload": {"type": "boolean", "default": True},
+    }
+) | {
+    "x-kubernetes-validations": [
+        {"rule": "!has(self.enabled) || !self.enabled || !has(self.includePayload) || self.includePayload", "message": "HOMER capture requires includePayload=true"}
+    ]
+}
+observability = obj({"capture": capture})
 status = {"type": "object", "x-kubernetes-preserve-unknown-fields": True}
 
 SPECS = {
@@ -215,6 +231,7 @@ SPECS = {
             "externalAddress": address,
             "internalAddress": address,
             "service": service,
+            "observability": observability,
         },
         ("databaseSecretRef", "networkProfileRef", "mediaRelayRef"),
     ),

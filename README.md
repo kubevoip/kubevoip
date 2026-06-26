@@ -22,6 +22,16 @@ collectors.
 ## Install
 
 ```bash
+helm repo add kubevoip https://charts.kubevoip.com
+helm repo update
+helm install kubevoip kubevoip/kubevoip \
+  --version 0.6.7 \
+  --namespace telephony --create-namespace
+```
+
+The same chart is also published to GHCR OCI for existing automation:
+
+```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
   --version 0.6.7 \
   --namespace telephony --create-namespace
@@ -35,7 +45,9 @@ pods with a namespace-scoped `KopfPeering` object so only one pod reconciles at
 a time, provided generated priorities do not collide:
 
 ```bash
-helm upgrade --install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
+helm repo add kubevoip https://charts.kubevoip.com
+helm repo update
+helm upgrade --install kubevoip kubevoip/kubevoip \
   --version 0.6.7 \
   --namespace telephony --create-namespace \
   --set operator.highAvailability.enabled=true \
@@ -94,7 +106,9 @@ PostgreSQL database for testing and assumes your cluster can provision UDP
 `LoadBalancer` Services.
 
 ```bash
-helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
+helm repo add kubevoip https://charts.kubevoip.com
+helm repo update
+helm install kubevoip kubevoip/kubevoip \
   --version 0.6.7 \
   --namespace telephony --create-namespace
 

@@ -9,7 +9,6 @@ Requirements:
 
 - Python 3.12+
 - `uv`
-- Helm 3
 - Docker
 - Access to a Kubernetes cluster for integration testing
 
@@ -19,9 +18,10 @@ Run the local checks before opening a pull request:
 uv sync --extra dev
 uv run ruff check .
 uv run pytest
-helm lint charts/kubevoip
-helm template kubevoip charts/kubevoip >/dev/null
 ```
+
+Helm chart source and chart rendering tests live in
+[`kubevoip/charts`](https://github.com/kubevoip/charts).
 
 Keep changes focused. Add tests for behavioral changes. Treat every `v1alpha1`
 API change as a compatibility decision that needs documentation.

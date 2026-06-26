@@ -161,10 +161,11 @@ database guidance, see the [KubeVoIP documentation](https://docs.kubevoip.com).
 uv sync --extra dev
 uv run ruff check .
 uv run pytest
-helm lint charts/kubevoip
-helm template kubevoip charts/kubevoip
 kubectl apply --dry-run=server -f config/crd/platform-crds.yaml
 ```
+
+Helm chart source and chart rendering tests live in
+[`kubevoip/charts`](https://github.com/kubevoip/charts).
 
 Run the controller against a development cluster:
 

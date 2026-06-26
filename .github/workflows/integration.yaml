@@ -73,10 +73,12 @@ jobs:
       - run: kind load docker-image kubevoip:test kubevoip-sipp:test
       - uses: azure/setup-helm@v5
       - run: |
+          helm repo add kubevoip https://charts.kubevoip.com
+          helm repo update
           kubectl create namespace asterisk-demo
           kubectl create namespace kubevoip-platform
           for namespace in asterisk-demo kubevoip-platform; do
-            helm install kubevoip charts/kubevoip \
+            helm install kubevoip kubevoip/kubevoip \
               --namespace "${namespace}" \
               --set image.repository=kubevoip --set image.tag=test
             kubectl -n "${namespace}" wait --for=condition=Available deployment/kubevoip-kubevoip --timeout=180s

@@ -50,19 +50,6 @@ jobs:
       - run: uv sync --extra dev
       - run: uv run ruff check .
       - run: uv run pytest
-      - uses: azure/setup-helm@v5
-      - run: helm lint charts/kubevoip
-      - run: helm template kubevoip charts/kubevoip >/dev/null
-      - name: Verify namespace-scoped chart resources
-        run: |
-          helm template kubevoip charts/kubevoip --namespace telephony > /tmp/kubevoip.yaml
-          grep -q '^kind: Role$' /tmp/kubevoip.yaml
-          grep -q '^kind: RoleBinding$' /tmp/kubevoip.yaml
-          grep -q '^kind: ClusterRole$' /tmp/kubevoip.yaml
-          grep -q '^kind: ClusterRoleBinding$' /tmp/kubevoip.yaml
-          grep -Fq 'resources: ["namespaces"]' /tmp/kubevoip.yaml
-          grep -Fq 'resources: ["customresourcedefinitions"]' /tmp/kubevoip.yaml
-          grep -q -- '--namespace=telephony' /tmp/kubevoip.yaml
       - name: Validate CRD on Kubernetes
         uses: helm/kind-action@v1
       - run: kubectl apply --dry-run=server -f config/crd/platform-crds.yaml

@@ -60,18 +60,6 @@ filename = "pyproject.toml"
 filename = "kubevoip/__init__.py"
 
 [[tool.bumpversion.files]]
-filename = "charts/kubevoip/Chart.yaml"
-
-[[tool.bumpversion.files]]
-filename = "charts/kubevoip/values.yaml"
-search = '''image:
-  repository: ghcr.io/kubevoip/kubevoip
-  tag: "v{current_version}"'''
-replace = '''image:
-  repository: ghcr.io/kubevoip/kubevoip
-  tag: "v{new_version}"'''
-
-[[tool.bumpversion.files]]
 filename = "README.md"
 
 [[tool.bumpversion.files]]

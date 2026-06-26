@@ -1,9 +1,0 @@
-{{- if .Values.operator.highAvailability.enabled }}
-apiVersion: kopf.dev/v1
-kind: KopfPeering
-metadata:
-  name: {{ include "kubevoip.peeringName" . }}
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "kubevoip.labels" . | nindent 4 }}
-{{- end }}

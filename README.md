@@ -30,6 +30,23 @@ helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
 Each Helm release watches only its installation namespace. CRDs remain
 cluster-scoped Kubernetes resources shared by all releases.
 
+Operator failover HA is opt-in. It runs multiple active/passive Kopf operator
+pods with a namespace-scoped `KopfPeering` object so only one pod reconciles at
+a time, provided generated priorities do not collide:
+
+```bash
+helm upgrade --install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
+  --version 0.6.5 \
+  --namespace telephony --create-namespace \
+  --set operator.highAvailability.enabled=true \
+  --set operator.replicas=3
+```
+
+This improves controller availability only; configure the SIP gateway, media
+relay, Asterisk workers, and PostgreSQL separately for platform HA. Kopf
+peering CRDs are cluster-scoped Kubernetes resources shared by all KubeVoIP
+releases, while each release creates its own namespaced `KopfPeering`.
+
 ## Observability
 
 KubeVoIP gives operators useful logs without requiring a bundled logging stack:

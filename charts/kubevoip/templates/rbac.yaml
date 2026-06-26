@@ -45,6 +45,11 @@ rules:
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["create", "patch"]
+  {{- if .Values.operator.highAvailability.enabled }}
+  - apiGroups: ["kopf.dev"]
+    resources: ["kopfpeerings"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+  {{- end }}
   - apiGroups: ["apps"]
     resources: ["statefulsets", "deployments"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]

@@ -1,3 +1,14 @@
+{{- if and (gt (.Values.operator.replicas | int) 1) (not .Values.operator.highAvailability.enabled) -}}
+{{- fail "operator.replicas > 1 requires operator.highAvailability.enabled=true because multiple standalone Kopf pods can reconcile the same namespace" -}}
+{{- end -}}
+{{- $affinity := deepCopy .Values.affinity -}}
+{{- if .Values.operator.highAvailability.enabled -}}
+{{- $podAntiAffinity := get $affinity "podAntiAffinity" | default dict -}}
+{{- $preferred := get $podAntiAffinity "preferredDuringSchedulingIgnoredDuringExecution" | default list -}}
+{{- $haTerm := dict "weight" 100 "podAffinityTerm" (dict "topologyKey" "kubernetes.io/hostname" "labelSelector" (dict "matchLabels" (dict "app.kubernetes.io/name" (include "kubevoip.name" .) "app.kubernetes.io/instance" .Release.Name))) -}}
+{{- $_ := set $podAntiAffinity "preferredDuringSchedulingIgnoredDuringExecution" (append $preferred $haTerm) -}}
+{{- $_ := set $affinity "podAntiAffinity" $podAntiAffinity -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,7 +16,7 @@ metadata:
   labels:
     {{- include "kubevoip.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.operator.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "kubevoip.name" . }}
@@ -24,13 +35,53 @@ spec:
         - name: operator
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.operator.highAvailability.enabled }}
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              : "${POD_IP:?POD_IP is required for Kopf HA priority}"
+              priority="$(python - <<'PY'
+              import ipaddress
+              import os
+              import sys
+
+              pod_ip = os.environ.get("POD_IP", "")
+              try:
+                  value = int(ipaddress.ip_address(pod_ip))
+              except ValueError:
+                  print(f"invalid POD_IP for Kopf HA priority: {pod_ip!r}", file=sys.stderr)
+                  sys.exit(1)
+
+              # Pod-IP-derived priorities are probabilistically unique. The
+              # collision risk is acceptable for supported small HA replica
+              # counts, normally 2 or 3 standby-capable operator pods.
+              print(value % 32767 + 1)
+              PY
+              )"
+              case "$priority" in
+                ''|*[!0-9]*)
+                  echo "invalid Kopf HA priority: $priority" >&2
+                  exit 1
+                  ;;
+              esac
+              exec kopf run /app/kubevoip/main.py --namespace={{ .Release.Namespace }} --peering={{ include "kubevoip.peeringName" . }} --priority="$priority"
+          {{- else }}
           args:
             - --namespace={{ .Release.Namespace }}
+          {{- end }}
           env:
             - name: KUBEVOIP_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            {{- if .Values.operator.highAvailability.enabled }}
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            {{- end }}
             - name: KUBEVOIP_ASTERISK_WORKER_IMAGE
               value: "{{ .Values.asteriskImage.repository }}:{{ .Values.asteriskImage.tag }}"
             - name: KUBEVOIP_KAMAILIO_IMAGE
@@ -44,4 +95,4 @@ spec:
       tolerations:
         {{- toYaml .Values.tolerations | nindent 8 }}
       affinity:
-        {{- toYaml .Values.affinity | nindent 8 }}
+        {{- toYaml $affinity | nindent 8 }}

@@ -2,6 +2,15 @@
 
 All notable changes to KubeVoIP are documented in this file.
 
+## [0.6.6] - 2026-06-26
+
+### Added
+
+- Opt-in active/passive Kopf operator failover HA with namespaced
+  `KopfPeering`, configurable operator replicas, preferred pod anti-affinity,
+  and guarded Helm rendering to prevent unsafe multi-replica standalone
+  operators.
+
 ## [0.6.5] - 2026-06-26
 
 ### Fixed

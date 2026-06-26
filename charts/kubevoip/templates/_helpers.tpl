@@ -7,6 +7,9 @@
 {{- define "kubevoip.serviceAccountName" -}}
 {{- default (include "kubevoip.fullname" .) .Values.serviceAccount.name }}
 {{- end }}
+{{- define "kubevoip.peeringName" -}}
+{{- default (include "kubevoip.fullname" .) .Values.operator.highAvailability.peeringName }}
+{{- end }}
 {{- define "kubevoip.labels" -}}
 app.kubernetes.io/name: {{ include "kubevoip.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}

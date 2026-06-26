@@ -23,7 +23,7 @@ collectors.
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.5 \
+  --version 0.6.6 \
   --namespace telephony --create-namespace
 ```
 
@@ -36,7 +36,7 @@ a time, provided generated priorities do not collide:
 
 ```bash
 helm upgrade --install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.5 \
+  --version 0.6.6 \
   --namespace telephony --create-namespace \
   --set operator.highAvailability.enabled=true \
   --set operator.replicas=3
@@ -95,7 +95,7 @@ PostgreSQL database for testing and assumes your cluster can provision UDP
 
 ```bash
 helm install kubevoip oci://ghcr.io/kubevoip/charts/kubevoip \
-  --version 0.6.5 \
+  --version 0.6.6 \
   --namespace telephony --create-namespace
 
 uvx kubevoip -n telephony init

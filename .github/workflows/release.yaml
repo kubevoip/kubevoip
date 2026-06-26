@@ -102,7 +102,11 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           awk -v heading="## [$version]" '$0 == heading {found=1; next} /^## \[/ {found=0} found' CHANGELOG.md > release-notes.md
-          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
+          else
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file release-notes.md
+          fi
       - name: Trigger docs reference refresh
         env:
           GH_TOKEN: ${{ secrets.DOCS_WORKFLOW_TOKEN }}

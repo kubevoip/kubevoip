@@ -75,6 +75,7 @@ jobs:
             helm install kubevoip charts/kubevoip \
               --namespace "${namespace}" \
               --set image.repository=kubevoip --set image.tag=test
+            kubectl -n "${namespace}" wait --for=condition=Available deployment/kubevoip-kubevoip --timeout=180s
           done
       - name: Verify namespace-scoped Secret access
         run: |
@@ -97,7 +98,10 @@ jobs:
         run: |
           kubectl apply -f integration/platform.yaml
           kubectl -n kubevoip-platform wait --for=condition=Available deployment/postgres --timeout=180s
+          kubectl -n kubevoip-platform wait --for=create deployment/home-rtpengine-0 --timeout=240s
+          kubectl -n kubevoip-platform wait --for=create deployment/home-rtpengine-1 --timeout=240s
           kubectl -n kubevoip-platform wait --for=condition=Available deployment/home-rtpengine-0 deployment/home-rtpengine-1 --timeout=240s
+          kubectl -n kubevoip-platform wait --for=create statefulset/applications-asterisk-pool --timeout=240s
           kubectl -n kubevoip-platform wait --for=condition=Ready pod -l app.kubernetes.io/name=asterisk-worker --timeout=240s
           kubectl -n kubevoip-platform wait --for=create deployment/home-sip-gateway --timeout=240s
           kubectl -n kubevoip-platform wait --for=condition=Available deployment/home-sip-gateway --timeout=240s

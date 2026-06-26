@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/kubevoip/kubevoip
-  tag: "v0.6.4"
+  tag: "v0.6.5"
   pullPolicy: IfNotPresent
 
 asteriskImage:

@@ -1,0 +1,11 @@
+[general]
+format=wav
+odbcstorage=kubevoip
+odbctable=voicemessages
+forcename=yes
+forcegreetings=yes
+externnotify=/usr/local/bin/kubevoip-mwi-publish
+emailsubject=New voicemail from ${VM_CALLERID}
+emailbody=You have a new voicemail in mailbox ${VM_MAILBOX}.
+
+[default]

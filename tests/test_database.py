@@ -1,25 +1,34 @@
 import pytest
 from sqlalchemy.engine import URL
 
+import kubevoip.database as database_module
 from kubevoip.database import (
+    ActiveWatcher,
+    AsteriskVoicemailMessage,
+    AsteriskVoicemailUser,
     CallRoute,
     CallScope,
     DialPolicy,
     DialPolicyScope,
+    Presentity,
     SIPTrunk,
     SIPTrunkCIDR,
     SIPUser,
     Subscriber,
+    VoicemailMailbox,
+    Watcher,
     connection_string,
     reconcile_call_route,
     reconcile_call_scope,
     reconcile_dial_policy,
     reconcile_sip_trunk,
     reconcile_sip_user,
+    reconcile_voicemail_mailbox,
     redact_database,
     run_migrations,
     sqlalchemy_url,
     trunk_digest_ha1,
+    voicemail_message_counts,
 )
 
 
@@ -74,6 +83,12 @@ def test_orm_models_cover_runtime_tables():
         SIPTrunk.__tablename__,
         SIPTrunkCIDR.__tablename__,
         CallRoute.__tablename__,
+        AsteriskVoicemailUser.__tablename__,
+        AsteriskVoicemailMessage.__tablename__,
+        VoicemailMailbox.__tablename__,
+        Presentity.__tablename__,
+        ActiveWatcher.__tablename__,
+        Watcher.__tablename__,
     }
     assert tables == {
         "subscriber",
@@ -84,6 +99,12 @@ def test_orm_models_cover_runtime_tables():
         "kubevoip_sip_trunk",
         "kubevoip_sip_trunk_cidr",
         "kubevoip_call_route",
+        "voicemail",
+        "voicemessages",
+        "kubevoip_voicemail_mailbox",
+        "presentity",
+        "active_watchers",
+        "watchers",
     }
 
 
@@ -94,3 +115,57 @@ def test_public_database_reconcile_api_remains_importable():
     assert callable(reconcile_sip_user)
     assert callable(reconcile_sip_trunk)
     assert callable(reconcile_call_route)
+    assert callable(reconcile_voicemail_mailbox)
+    assert callable(voicemail_message_counts)
+
+
+def test_voicemail_mailbox_initial_pin_is_mailbox_and_not_reconciled(monkeypatch):
+    calls = []
+
+    class SessionFactory:
+        def begin(self):
+            return self
+
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(database_module, "run_migrations", lambda _database: None)
+    monkeypatch.setattr(database_module, "_session", lambda _database: SessionFactory())
+    monkeypatch.setattr(
+        database_module,
+        "_upsert",
+        lambda _session, model, values, conflict_columns, update_columns: calls.append((model, values, conflict_columns, update_columns)),
+    )
+
+    reconcile_voicemail_mailbox(
+        {"host": "postgres", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"},
+        "ns",
+        "daniel",
+        "uid",
+        "home",
+        "daniel",
+        "daniel",
+        "100",
+        "applications",
+        "applications-asterisk-pool.ns.svc.cluster.local",
+        "701",
+        "100",
+        "Daniel <100>",
+        True,
+        15,
+        True,
+        True,
+        True,
+        False,
+        None,
+        None,
+        None,
+    )
+
+    voicemail_user = calls[0]
+    assert voicemail_user[0] is AsteriskVoicemailUser
+    assert voicemail_user[1]["password"] == "100"
+    assert "password" not in voicemail_user[3]

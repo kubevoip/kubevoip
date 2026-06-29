@@ -121,14 +121,39 @@ class MediaRelaySpec(Model):
         return self
 
 
+class VoicemailApplicationSpec(Model):
+    enabled: bool = False
+    main_extension: str = Field(default="700", alias="mainExtension", pattern=r"^[0-9]+$")
+    main_mailbox: str | None = Field(default=None, alias="mainMailbox", pattern=r"^[0-9]+$")
+    deposit_extension: str = Field(default="701", alias="depositExtension", pattern=r"^[0-9]+$")
+
+    @model_validator(mode="after")
+    def validate_extensions(self) -> "VoicemailApplicationSpec":
+        if self.main_extension == self.deposit_extension:
+            raise ValueError("voicemail mainExtension and depositExtension must be different")
+        return self
+
+
 class ApplicationsSpec(Model):
     echo_extension: str = Field(default="600", alias="echoExtension", pattern=r"^[0-9]+$")
+    voicemail: VoicemailApplicationSpec = Field(default_factory=VoicemailApplicationSpec)
+
+
+class DatabaseSecretRef(Model):
+    name: str = Field(min_length=1)
 
 
 class AsteriskPoolSpec(Model):
     replicas: int = Field(default=1, ge=1, le=32)
     image: str = Field(default=DEFAULT_ASTERISK_WORKER_IMAGE, min_length=1)
+    database_secret_ref: DatabaseSecretRef | None = Field(default=None, alias="databaseSecretRef")
     applications: ApplicationsSpec = Field(default_factory=ApplicationsSpec)
+
+    @model_validator(mode="after")
+    def validate_voicemail_database(self) -> "AsteriskPoolSpec":
+        if self.applications.voicemail.enabled and not self.database_secret_ref:
+            raise ValueError("voicemail requires databaseSecretRef")
+        return self
 
 
 class SIPUserSpec(Model):
@@ -138,10 +163,6 @@ class SIPUserSpec(Model):
     auth_username: str = Field(alias="authUsername", pattern=r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$", max_length=40)
     caller_id: str | None = Field(default=None, alias="callerId", max_length=80)
     password_secret_ref: SecretKeyRef = Field(alias="passwordSecretRef")
-
-
-class DatabaseSecretRef(Model):
-    name: str = Field(min_length=1)
 
 
 class HomerCaptureSpec(Model):
@@ -264,6 +285,42 @@ class DialPolicySpec(Model):
         if len(names) != len(set(names)):
             raise ValueError("DialPolicy scopes must be unique")
         return self
+
+
+class VoicemailFallbackSpec(Model):
+    enabled: bool = False
+    timeout_seconds: int = Field(default=20, alias="timeoutSeconds", ge=1, le=120)
+    on_busy: bool = Field(default=True, alias="onBusy")
+    on_unavailable: bool = Field(default=True, alias="onUnavailable")
+    on_no_answer: bool = Field(default=True, alias="onNoAnswer")
+
+    @model_validator(mode="after")
+    def validate_enabled_conditions(self) -> "VoicemailFallbackSpec":
+        if self.enabled and not (self.on_busy or self.on_unavailable or self.on_no_answer):
+            raise ValueError("enabled voicemail fallback requires at least one condition")
+        return self
+
+
+class VoicemailEmailSpec(Model):
+    enabled: bool = False
+    to: str | None = Field(default=None, min_length=3, max_length=253)
+    from_address: str | None = Field(default=None, alias="from", min_length=3, max_length=253)
+    provider: Literal["SendGrid"] = "SendGrid"
+    api_key_secret_ref: SecretKeyRef | None = Field(default=None, alias="apiKeySecretRef")
+
+    @model_validator(mode="after")
+    def validate_email_settings(self) -> "VoicemailEmailSpec":
+        if self.enabled and not (self.to and self.from_address and self.api_key_secret_ref):
+            raise ValueError("enabled voicemail email requires to, from, and apiKeySecretRef")
+        return self
+
+
+class VoicemailMailboxSpec(Model):
+    sip_user_ref: LocalReference = Field(alias="sipUserRef")
+    asterisk_pool_ref: LocalReference = Field(alias="asteriskPoolRef")
+    mailbox: str | None = Field(default=None, pattern=r"^[0-9]+$", max_length=20)
+    email: VoicemailEmailSpec = Field(default_factory=VoicemailEmailSpec)
+    fallback: VoicemailFallbackSpec = Field(default_factory=VoicemailFallbackSpec)
 
 
 class SIPGatewaySpec(Model):

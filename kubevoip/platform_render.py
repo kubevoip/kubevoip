@@ -27,13 +27,30 @@ def render_template(name: str, **values: object) -> str:
     return TEMPLATES.get_template(name).render(**values)
 
 
-def render_worker_configs(spec: AsteriskPoolSpec) -> dict[str, str]:
-    return {
+def render_worker_configs(spec: AsteriskPoolSpec, database: dict[str, str] | None = None) -> dict[str, str]:
+    voicemail = spec.applications.voicemail
+    configs = {
         "pjsip.conf": render_template("asterisk/pjsip.conf.j2"),
-        "extensions.conf": render_template("asterisk/extensions.conf.j2", echo_extension=spec.applications.echo_extension),
+        "extensions.conf": render_template(
+            "asterisk/extensions.conf.j2",
+            echo_extension=spec.applications.echo_extension,
+            voicemail=voicemail,
+        ),
         "rtp.conf": render_template("asterisk/rtp.conf.j2"),
         "logger.conf": render_template("asterisk/logger.conf.j2"),
     }
+    if voicemail.enabled:
+        if database is None:
+            raise ValueError("voicemail rendering requires database settings")
+        configs.update(
+            {
+                "res_odbc.conf": render_template("asterisk/res_odbc.conf.j2", database=database),
+                "extconfig.conf": render_template("asterisk/extconfig.conf.j2"),
+                "voicemail.conf": render_template("asterisk/voicemail.conf.j2"),
+                "odbc.ini": render_template("asterisk/odbc.ini.j2", database=database),
+            }
+        )
+    return configs
 
 
 def kamailio_string(value: str) -> str:
@@ -83,14 +100,39 @@ def render_kamailio_config(
         "and auth_username='"
     )
     caller_query_suffix = "' limit 1"
+    mwi_user_query_prefix = (
+        "select mailbox from kubevoip_voicemail_mailbox "
+        f"where namespace='{sql_namespace}' and gateway_name='{sql_gateway}' and sip_auth_username='"
+    )
+    mwi_user_query_suffix = "' limit 1"
+    mwi_state_query_prefix = (
+        "select vm.mailbox, "
+        "coalesce(count(m.id) filter (where m.dir like '%/INBOX'),0), "
+        "coalesce(count(m.id) filter (where m.dir like '%/Old'),0), "
+        "coalesce(count(m.id) filter (where m.dir like '%/Urgent'),0) "
+        "from kubevoip_voicemail_mailbox vm "
+        "left join voicemessages m on m.mailboxuser=vm.mailbox and m.mailboxcontext='default' "
+        f"where vm.namespace='{sql_namespace}' and vm.gateway_name='{sql_gateway}' and vm.sip_auth_username='"
+    )
+    mwi_state_query_suffix = "' group by vm.mailbox limit 1"
+    mwi_contacts_query_prefix = "select contact from location where username='"
+    mwi_contacts_query_suffix = (
+        f"' and (domain is null or domain='' or domain='{sql_gateway}') "
+        "and expires > now() order by last_modified desc"
+    )
     route_query_prefix = (
         "select r.target_kind, r.target_ref, coalesce(r.target_extension,''), coalesce(r.target_host,''), "
         "coalesce(u.auth_username,''), coalesce(t.termination_uri,''), coalesce(t.outbound_caller_id,''), "
-        "coalesce(t.digest_username,''), coalesce(t.digest_realm,''), coalesce(t.digest_ha1,'') "
+        "coalesce(t.digest_username,''), coalesce(t.digest_realm,''), coalesce(t.digest_ha1,''), "
+        "coalesce(vm.mailbox,''), coalesce(vm.target_host,''), coalesce(vm.target_extension,''), "
+        "coalesce(vm.fallback_timeout_seconds,0), coalesce(vm.fallback_on_busy,0), "
+        "coalesce(vm.fallback_on_unavailable,0), coalesce(vm.fallback_on_no_answer,0) "
         "from kubevoip_dial_policy_scope d "
         "join kubevoip_call_route r on r.namespace=d.namespace and r.scope_name=d.scope_name "
         "left join kubevoip_sip_user u on r.target_kind='SIPUser' and u.namespace=r.namespace and u.name=r.target_ref "
         "left join kubevoip_sip_trunk t on r.target_kind='SIPTrunk' and t.namespace=r.namespace and t.name=r.target_ref "
+        "left join kubevoip_voicemail_mailbox vm on r.target_kind='SIPUser' and vm.namespace=r.namespace and "
+        "vm.gateway_name=r.gateway_name and vm.sip_user_name=r.target_ref and vm.fallback_enabled=1 "
         f"where d.namespace='{sql_namespace}' and d.policy_name='"
     )
     route_query_middle = (
@@ -124,6 +166,12 @@ def render_kamailio_config(
         trusted_query_suffix=trusted_query_suffix,
         caller_query_prefix=caller_query_prefix,
         caller_query_suffix=caller_query_suffix,
+        mwi_user_query_prefix=mwi_user_query_prefix,
+        mwi_user_query_suffix=mwi_user_query_suffix,
+        mwi_state_query_prefix=mwi_state_query_prefix,
+        mwi_state_query_suffix=mwi_state_query_suffix,
+        mwi_contacts_query_prefix=mwi_contacts_query_prefix,
+        mwi_contacts_query_suffix=mwi_contacts_query_suffix,
         route_query_prefix=route_query_prefix,
         route_query_middle=route_query_middle,
         route_query_suffix=route_query_suffix,

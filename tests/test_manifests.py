@@ -32,6 +32,10 @@ def test_operator_image_includes_alembic_migrations():
     assert (ROOT / "database/alembic.ini").exists()
     assert (ROOT / "database/env.py").exists()
     assert (ROOT / "database/versions/0001_runtime_schema.py").exists()
+    assert (ROOT / "database/versions/0002_voicemail_odbc.py").exists()
+    assert (ROOT / "database/versions/0003_voicemail_realtime_uniqueid.py").exists()
+    assert (ROOT / "database/versions/0004_voicemail_message_id.py").exists()
+    assert (ROOT / "database/versions/0005_kamailio_mwi_presence.py").exists()
     assert not (ROOT / "database/versions/0001_kamailio_subscriber.py").exists()
     assert not (ROOT / "database/versions/0002_runtime_routing.py").exists()
 
@@ -42,3 +46,7 @@ def test_operator_package_includes_render_templates():
     assert (ROOT / "kubevoip/templates/asterisk/extensions.conf.j2").exists()
     assert (ROOT / "kubevoip/templates/asterisk/rtp.conf.j2").exists()
     assert (ROOT / "kubevoip/templates/asterisk/logger.conf.j2").exists()
+    assert (ROOT / "kubevoip/templates/asterisk/res_odbc.conf.j2").exists()
+    assert (ROOT / "kubevoip/templates/asterisk/extconfig.conf.j2").exists()
+    assert (ROOT / "kubevoip/templates/asterisk/voicemail.conf.j2").exists()
+    assert (ROOT / "kubevoip/templates/asterisk/odbc.ini.j2").exists()

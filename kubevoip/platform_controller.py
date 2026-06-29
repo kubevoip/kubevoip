@@ -14,11 +14,13 @@ from kubevoip.database import (
     delete_dial_policy,
     delete_sip_trunk,
     delete_sip_user,
+    delete_voicemail_mailbox,
     reconcile_call_route,
     reconcile_call_scope,
     reconcile_dial_policy,
     reconcile_sip_trunk,
     reconcile_sip_user,
+    reconcile_voicemail_mailbox,
     trunk_digest_ha1,
 )
 from kubevoip.k8s import Kubernetes
@@ -32,6 +34,7 @@ from kubevoip.models import (
     SIPGatewaySpec,
     SIPTrunkSpec,
     SIPUserSpec,
+    VoicemailMailboxSpec,
 )
 from kubevoip.platform_resources import (
     build_asterisk_pool_resources,
@@ -200,7 +203,16 @@ def reconcile_media_relay(body: dict[str, Any], raw_spec: dict[str, Any], kubern
 def reconcile_asterisk_pool(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
     spec = _model(AsteriskPoolSpec, raw_spec)
     namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
-    for resource in build_asterisk_pool_resources(name, namespace, body, spec):
+    database = None
+    if spec.applications.voicemail.enabled:
+        if not spec.database_secret_ref:
+            raise InvalidSpecError("voicemail requires databaseSecretRef")
+        database = _database_secret(namespace, spec.database_secret_ref.name, kubernetes)
+        try:
+            database_ready(database)
+        except Exception as error:
+            raise DependencyError("AsteriskPool voicemail database is unavailable") from error
+    for resource in build_asterisk_pool_resources(name, namespace, body, spec, database):
         kubernetes.apply(resource)
     ready = kubernetes.ready_replicas(namespace, f"{name}-asterisk-pool")
     return platform_status(
@@ -208,9 +220,21 @@ def reconcile_asterisk_pool(body: dict[str, Any], raw_spec: dict[str, Any], kube
         ready == spec.replicas,
         "ReplicasReady" if ready == spec.replicas else "Reconciling",
         f"{ready}/{spec.replicas} Asterisk workers are ready",
-        {"readyReplicas": ready, "service": f"{name}-asterisk-pool"},
+        {
+            "readyReplicas": ready,
+            "service": f"{name}-asterisk-pool",
+            **({"databaseSecretRef": spec.database_secret_ref.name} if spec.database_secret_ref else {}),
+        },
         body.get("status", {}).get("conditions"),
         [
+            (
+                "DatabaseReady",
+                True,
+                "Connected",
+                "Voicemail database is reachable and schema is applied",
+            )
+            if spec.applications.voicemail.enabled
+            else ("DatabaseReady", True, "NotRequired", "Voicemail database is not required"),
             ("ConfigurationReady", True, "Rendered", "Asterisk worker configuration is rendered"),
             ("ReplicasReady", ready == spec.replicas, "Available" if ready == spec.replicas else "Reconciling", f"{ready}/{spec.replicas} Asterisk workers are ready"),
         ],
@@ -482,6 +506,85 @@ def reconcile_sip_user_controller(body: dict[str, Any], raw_spec: dict[str, Any]
             ("DatabaseReady", True, "Stored", "SIP subscriber and runtime data are stored"),
         ],
     )
+
+
+def reconcile_voicemail_mailbox_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> dict[str, Any]:
+    spec = _model(VoicemailMailboxSpec, raw_spec)
+    namespace, name = body["metadata"]["namespace"], body["metadata"]["name"]
+    try:
+        user_body = kubernetes.read_custom(namespace, "sipusers", spec.sip_user_ref.name)
+        user_spec = _model(SIPUserSpec, user_body["spec"])
+        pool_body = kubernetes.read_custom(namespace, "asteriskpools", spec.asterisk_pool_ref.name)
+        pool_spec = _model(AsteriskPoolSpec, pool_body["spec"])
+        if not pool_spec.applications.voicemail.enabled:
+            raise InvalidSpecError(f"AsteriskPool {namespace}/{spec.asterisk_pool_ref.name} does not enable voicemail")
+        gateway_spec, database = _gateway_database(namespace, user_spec.gateway_ref.name, kubernetes)
+        if not pool_spec.database_secret_ref or pool_spec.database_secret_ref.name != gateway_spec.database_secret_ref.name:
+            raise InvalidSpecError("VoicemailMailbox requires SIPUser gateway and AsteriskPool to use the same databaseSecretRef")
+        if spec.email.enabled and spec.email.api_key_secret_ref:
+            kubernetes.read_secret(namespace, spec.email.api_key_secret_ref.name, spec.email.api_key_secret_ref.key)
+        mailbox = spec.mailbox or user_spec.extension
+        target_host = f"{spec.asterisk_pool_ref.name}-asterisk-pool.{namespace}.svc.cluster.local"
+        reconcile_voicemail_mailbox(
+            database,
+            namespace,
+            name,
+            _uid(body),
+            user_spec.gateway_ref.name,
+            spec.sip_user_ref.name,
+            user_spec.auth_username,
+            user_spec.extension,
+            spec.asterisk_pool_ref.name,
+            target_host,
+            pool_spec.applications.voicemail.deposit_extension,
+            mailbox,
+            user_spec.caller_id,
+            spec.fallback.enabled,
+            spec.fallback.timeout_seconds,
+            spec.fallback.on_busy,
+            spec.fallback.on_unavailable,
+            spec.fallback.on_no_answer,
+            spec.email.enabled,
+            spec.email.to,
+            spec.email.from_address,
+            spec.email.provider,
+        )
+    except InvalidSpecError:
+        raise
+    except (ApiException, KeyError, UnicodeDecodeError) as error:
+        raise DependencyError("VoicemailMailbox dependencies are unavailable") from error
+    except Exception as error:
+        raise DependencyError("VoicemailMailbox database reconciliation failed") from error
+    return platform_status(
+        body["metadata"].get("generation", 1),
+        True,
+        "MailboxReady",
+        "Voicemail mailbox is stored in the gateway database",
+        {
+            "gateway": user_spec.gateway_ref.name,
+            "sipUser": spec.sip_user_ref.name,
+            "asteriskPool": spec.asterisk_pool_ref.name,
+            "mailbox": mailbox,
+            "databaseSecretRef": gateway_spec.database_secret_ref.name,
+        },
+        body.get("status", {}).get("conditions"),
+        [
+            ("ReferencesResolved", True, "Resolved", "VoicemailMailbox references are resolved"),
+            ("DatabaseReady", True, "Stored", "Voicemail mailbox runtime data is stored"),
+        ],
+    )
+
+
+def delete_voicemail_mailbox_controller(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes) -> None:
+    spec = _model(VoicemailMailboxSpec, raw_spec)
+    namespace = body["metadata"]["namespace"]
+    try:
+        user_body = kubernetes.read_custom(namespace, "sipusers", spec.sip_user_ref.name)
+        user_spec = _model(SIPUserSpec, user_body["spec"])
+        _gateway_spec, database = _gateway_database(namespace, user_spec.gateway_ref.name, kubernetes)
+    except Exception:
+        database = _database_secret(namespace, body.get("status", {}).get("databaseSecretRef", ""), kubernetes)
+    delete_voicemail_mailbox(database, namespace, body["metadata"]["name"])
 
 
 def _delete_runtime_row(body: dict[str, Any], raw_spec: dict[str, Any], kubernetes: Kubernetes, model, delete_func) -> None:

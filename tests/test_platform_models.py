@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from kubevoip.models import (
+    AsteriskPoolSpec,
     CallRouteSpec,
     CallScopeSpec,
     DialPolicySpec,
@@ -12,6 +13,7 @@ from kubevoip.models import (
     SIPGatewaySpec,
     SIPTrunkSpec,
     SIPUserSpec,
+    VoicemailMailboxSpec,
 )
 
 
@@ -236,6 +238,62 @@ def test_gateway_sdp_logging_validation():
         }
     )
     assert spec.observability.sdp.enabled is True
+
+
+def test_asterisk_pool_voicemail_requires_database_ref():
+    spec = AsteriskPoolSpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "applications": {"voicemail": {"enabled": True, "mainExtension": "700", "mainMailbox": "100", "depositExtension": "701"}},
+        }
+    )
+    assert spec.applications.voicemail.enabled is True
+    assert spec.applications.voicemail.main_mailbox == "100"
+    assert spec.database_secret_ref.name == "db"
+    with pytest.raises(ValidationError):
+        AsteriskPoolSpec.model_validate({"applications": {"voicemail": {"enabled": True}}})
+    with pytest.raises(ValidationError):
+        AsteriskPoolSpec.model_validate(
+            {
+                "databaseSecretRef": {"name": "db"},
+                "applications": {"voicemail": {"enabled": True, "mainExtension": "700", "depositExtension": "700"}},
+            }
+        )
+
+
+def test_voicemail_mailbox_validates_email_and_fallback():
+    spec = VoicemailMailboxSpec.model_validate(
+        {
+            "sipUserRef": {"name": "daniel"},
+            "asteriskPoolRef": {"name": "applications"},
+            "email": {
+                "enabled": True,
+                "to": "daniel@example.com",
+                "from": "voicemail@example.com",
+                "apiKeySecretRef": {"name": "sendgrid", "key": "api-key"},
+            },
+            "fallback": {"enabled": True, "timeoutSeconds": 15},
+        }
+    )
+    assert spec.mailbox is None
+    assert spec.email.provider == "SendGrid"
+    assert spec.fallback.on_no_answer is True
+    with pytest.raises(ValidationError):
+        VoicemailMailboxSpec.model_validate(
+            {
+                "sipUserRef": {"name": "daniel"},
+                "asteriskPoolRef": {"name": "applications"},
+                "email": {"enabled": True, "to": "daniel@example.com"},
+            }
+        )
+    with pytest.raises(ValidationError):
+        VoicemailMailboxSpec.model_validate(
+            {
+                "sipUserRef": {"name": "daniel"},
+                "asteriskPoolRef": {"name": "applications"},
+                "fallback": {"enabled": True, "onBusy": False, "onUnavailable": False, "onNoAnswer": False},
+            }
+        )
 
 
 def test_addresses_and_routes_reject_configuration_injection():

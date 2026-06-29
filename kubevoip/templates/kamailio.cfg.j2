@@ -23,6 +23,8 @@ loadmodule "auth.so"
 loadmodule "auth_db.so"
 loadmodule "usrloc.so"
 loadmodule "registrar.so"
+loadmodule "presence.so"
+loadmodule "presence_mwi.so"
 loadmodule "sqlops.so"
 loadmodule "uac.so"
 loadmodule "dialog.so"
@@ -36,6 +38,11 @@ modparam("usrloc", "db_url", "__DBURL__")
 modparam("auth_db", "db_url", "__DBURL__")
 modparam("auth_db", "password_column", "ha1")
 modparam("auth_db", "calculate_ha1", 0)
+modparam("presence", "db_url", "__DBURL__")
+modparam("presence", "server_address", "sip:ADVERTISED_ADDR:5060")
+modparam("presence", "subs_db_mode", 3)
+modparam("presence", "publ_cache", 0)
+modparam("presence_mwi", "default_expires", 3600)
 modparam("uac", "auth_username_avp", "$avp(auser)")
 modparam("uac", "auth_password_avp", "$avp(apass)")
 modparam("uac", "auth_realm_avp", "$avp(arealm)")
@@ -78,6 +85,18 @@ request_route {
     }
     save("location");
     xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=register_saved call_id=$ci source=$si user=$aU\n");
+    if (!($hdr(Expires) == "0") && !($ct =~ "expires=0")) {
+      $rU = $aU;
+      route(SEND_MWI_NOTIFY_TO_CONTACTS);
+    }
+    exit;
+  }
+  if (is_method("SUBSCRIBE") && $hdr(Event) =~ "message-summary") {
+    route(HANDLE_MWI_SUBSCRIBE);
+    exit;
+  }
+  if (is_method("PUBLISH") && $hdr(Event) =~ "message-summary") {
+    route(HANDLE_MWI_PUBLISH);
     exit;
   }
   if (is_method("INVITE") && !isflagset(1)) {
@@ -99,13 +118,110 @@ request_route {
     send_reply("404", "No route");
     exit;
   }
-  if (has_body("application/sdp")) {
-    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_offer call_id=$ci source=$si target=$rU\n");
-    rtpengine_offer("replace-origin replace-session-connection");
-  }
   if (is_method("INVITE")) { dlg_manage(); {{ record_route_line }} }
   route(ROUTE_INVITE);
   exit;
+}
+
+route[LOAD_MWI_MAILBOX] {
+  $avp(mwi_mailbox) = "";
+  $var(mwi_user_query) = "{{ mwi_user_query_prefix }}" + $rU + "{{ mwi_user_query_suffix }}";
+  sql_query("kubevoip", "$var(mwi_user_query)", "mwi_user");
+  if ($dbr(mwi_user=>rows) > 0) {
+    $avp(mwi_mailbox) = $dbr(mwi_user=>[0,0]);
+  }
+  sql_result_free("mwi_user");
+}
+
+route[LOAD_MWI_STATE] {
+  $avp(mwi_mailbox) = "";
+  $avp(mwi_new) = 0;
+  $avp(mwi_old) = 0;
+  $avp(mwi_urgent) = 0;
+  $var(mwi_state_query) = "{{ mwi_state_query_prefix }}" + $rU + "{{ mwi_state_query_suffix }}";
+  sql_query("kubevoip", "$var(mwi_state_query)", "mwi_state");
+  if ($dbr(mwi_state=>rows) > 0) {
+    $avp(mwi_mailbox) = $dbr(mwi_state=>[0,0]);
+    $avp(mwi_new) = $dbr(mwi_state=>[0,1]);
+    $avp(mwi_old) = $dbr(mwi_state=>[0,2]);
+    $avp(mwi_urgent) = $dbr(mwi_state=>[0,3]);
+  }
+  sql_result_free("mwi_state");
+}
+
+route[HANDLE_MWI_SUBSCRIBE] {
+  if (!www_authorize(AUTH_REALM, "subscriber")) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_subscribe_challenge call_id=$ci source=$si target=$rU\n");
+    www_challenge(AUTH_REALM, "0");
+    exit;
+  }
+  if ($aU != $rU) {
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_subscribe_forbidden call_id=$ci source=$si auth_user=$aU target=$rU\n");
+    send_reply("403", "Forbidden");
+    exit;
+  }
+  route(LOAD_MWI_MAILBOX);
+  if ($avp(mwi_mailbox) == "") {
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_subscribe_no_mailbox call_id=$ci source=$si target=$rU\n");
+    send_reply("404", "No mailbox");
+    exit;
+  }
+  consume_credentials();
+  xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_subscribe call_id=$ci source=$si user=$rU mailbox=$avp(mwi_mailbox)\n");
+  handle_subscribe();
+  exit;
+}
+
+route[HANDLE_MWI_PUBLISH] {
+  route(LOAD_MWI_MAILBOX);
+  if ($avp(mwi_mailbox) == "") {
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_publish_no_mailbox call_id=$ci source=$si target=$rU\n");
+    send_reply("404", "No mailbox");
+    exit;
+  }
+  xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_publish call_id=$ci source=$si user=$rU mailbox=$avp(mwi_mailbox)\n");
+  $var(mwi_replace_query) = "delete from presentity where username='" + $rU + "' and domain='AUTH_REALM' and event='message-summary'";
+  sql_query("kubevoip", "$var(mwi_replace_query)", "mwi_replace");
+  sql_result_free("mwi_replace");
+  handle_publish();
+  route(SEND_MWI_NOTIFY_TO_CONTACTS);
+  exit;
+}
+
+route[SEND_MWI_NOTIFY] {
+  $var(mwi_waiting) = "no";
+  if ($avp(mwi_new) > 0 || $avp(mwi_urgent) > 0) {
+    $var(mwi_waiting) = "yes";
+  }
+  $var(mwi_body) = "Messages-Waiting: " + $var(mwi_waiting) + "\r\n" + "Message-Account: sip:" + $rU + "@AUTH_REALM\r\n" + "Voice-Message: " + $avp(mwi_new) + "/" + $avp(mwi_old) + " (" + $avp(mwi_urgent) + "/0)\r\n";
+  $uac_req(method) = "NOTIFY";
+  $uac_req(ruri) = $var(mwi_contact);
+  $uac_req(furi) = "sip:voicemail@AUTH_REALM";
+  $uac_req(turi) = "sip:" + $rU + "@AUTH_REALM";
+  $uac_req(callid) = $(mb{s.md5});
+  $uac_req(hdrs) = "Event: message-summary\r\nSubscription-State: active;expires=3600\r\nContent-Type: application/simple-message-summary\r\n";
+  $uac_req(body) = $var(mwi_body);
+  if (uac_req_send()) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_notify_sent user=$rU contact=$var(mwi_contact) new=$avp(mwi_new) old=$avp(mwi_old) urgent=$avp(mwi_urgent)\n");
+  } else {
+    xlog("L_WARN", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=mwi_notify_failed user=$rU contact=$var(mwi_contact)\n");
+  }
+}
+
+route[SEND_MWI_NOTIFY_TO_CONTACTS] {
+  route(LOAD_MWI_STATE);
+  if ($avp(mwi_mailbox) == "") {
+    return;
+  }
+  $var(mwi_contacts_query) = "{{ mwi_contacts_query_prefix }}" + $rU + "{{ mwi_contacts_query_suffix }}";
+  sql_query("kubevoip", "$var(mwi_contacts_query)", "mwi_contacts");
+  $var(mwi_contact_index) = 0;
+  while ($var(mwi_contact_index) < $dbr(mwi_contacts=>rows)) {
+    $var(mwi_contact) = $dbr(mwi_contacts=>[$var(mwi_contact_index),0]);
+    route(SEND_MWI_NOTIFY);
+    $var(mwi_contact_index) = $var(mwi_contact_index) + 1;
+  }
+  sql_result_free("mwi_contacts");
 }
 
 route[DETECT_TRUSTED_TRUNK] {
@@ -129,6 +245,22 @@ route[LOAD_AUTHENTICATED_POLICY] {
   sql_result_free("caller");
 }
 
+route[RTPENGINE_OFFER_GENERIC] {
+  $dlg_var(media_target) = "generic";
+  if (has_body("application/sdp")) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_offer call_id=$ci source=$si target=$rU media_target=generic\n");
+    rtpengine_offer("replace-origin replace-session-connection direction=external direction=external");
+  }
+}
+
+route[RTPENGINE_OFFER_ASTERISK] {
+  $dlg_var(media_target) = "asterisk";
+  if (has_body("application/sdp")) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_offer call_id=$ci source=$si target=$rU media_target=asterisk\n");
+    rtpengine_offer("replace-origin replace-session-connection direction=external direction=internal");
+  }
+}
+
 route[ROUTE_INVITE] {
   $var(route_query) = "{{ route_query_prefix }}" + $avp(caller_policy) + "{{ route_query_middle }}" + $rU + "{{ route_query_suffix }}" + $rU + "{{ route_query_end }}";
   sql_query("kubevoip", "$var(route_query)", "route");
@@ -142,15 +274,32 @@ route[ROUTE_INVITE] {
   xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=route_selected call_id=$ci source=$si target=$rU target_kind=$avp(target_kind)\n");
   if ($avp(target_kind) == "SIPUser") {
     $rU = $dbr(route=>[0,4]);
+    $avp(vm_mailbox) = $dbr(route=>[0,10]);
+    $avp(vm_host) = $dbr(route=>[0,11]);
+    $avp(vm_extension) = $dbr(route=>[0,12]);
+    $avp(vm_timeout) = $dbr(route=>[0,13]);
+    $avp(vm_on_busy) = $dbr(route=>[0,14]);
+    $avp(vm_on_unavailable) = $dbr(route=>[0,15]);
+    $avp(vm_on_no_answer) = $dbr(route=>[0,16]);
     sql_result_free("route");
-    if (!lookup("location")) { send_reply("404", "Not registered"); exit; }
-    route(RELAY);
+    if (!lookup("location")) {
+      if ($avp(vm_mailbox) != "" && $avp(vm_on_unavailable) == 1) {
+        xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=voicemail_fallback_unavailable call_id=$ci target=$rU mailbox=$avp(vm_mailbox)\n");
+        route(SEND_TO_VOICEMAIL);
+        exit;
+      }
+      send_reply("404", "Not registered");
+      exit;
+    }
+    route(RTPENGINE_OFFER_GENERIC);
+    route(RELAY_USER);
     exit;
   }
   if ($avp(target_kind) == "AsteriskPool") {
     $rU = $dbr(route=>[0,2]);
     $du = "sip:" + $dbr(route=>[0,3]) + ":5060";
     sql_result_free("route");
+    route(RTPENGINE_OFFER_ASTERISK);
     route(RELAY);
     exit;
   }
@@ -165,6 +314,7 @@ route[ROUTE_INVITE] {
     $avp(arealm) = $dbr(route=>[0,8]);
     $avp(apass) = $dbr(route=>[0,9]);
     sql_result_free("route");
+    route(RTPENGINE_OFFER_GENERIC);
     route(RELAY_TRUNK);
     exit;
   }
@@ -183,6 +333,20 @@ route[RELAY] {
   exit;
 }
 
+route[RELAY_USER] {
+  t_on_reply("MANAGE_REPLY");
+  if ($avp(vm_mailbox) != "") {
+    $var(vm_fr) = $avp(vm_timeout) * 1000;
+    t_set_fr($var(vm_fr), $var(vm_fr));
+    t_on_failure("VOICEMAIL_FALLBACK");
+  }
+  if (!t_relay()) {
+    xlog("L_ERR", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=user_relay_failed call_id=$ci method=$rm target=$rU\n");
+    sl_reply_error();
+  }
+  exit;
+}
+
 route[RELAY_TRUNK] {
   t_on_reply("MANAGE_REPLY");
   t_on_failure("TRUNK_AUTH");
@@ -193,11 +357,44 @@ route[RELAY_TRUNK] {
   exit;
 }
 
+route[SEND_TO_VOICEMAIL] {
+  $rU = $avp(vm_extension);
+  $du = "sip:" + $avp(vm_host) + ":5060";
+  append_hf("X-KubeVoIP-Mailbox: $avp(vm_mailbox)\r\n");
+  route(RTPENGINE_OFFER_ASTERISK);
+  t_on_reply("MANAGE_REPLY");
+  if (!t_relay()) {
+    xlog("L_ERR", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=voicemail_relay_failed call_id=$ci mailbox=$avp(vm_mailbox)\n");
+    sl_reply_error();
+  }
+  exit;
+}
+
 failure_route[TRUNK_AUTH] {
   if (t_is_canceled()) { exit; }
   if (t_check_status("401|407") && $avp(auser) != "" && $avp(apass) != "") {
     xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=trunk_auth_retry call_id=$ci\n");
     if (uac_auth_mode("1")) { t_relay(); exit; }
+  }
+}
+
+failure_route[VOICEMAIL_FALLBACK] {
+  if (t_is_canceled()) { exit; }
+  if ($avp(vm_mailbox) == "") { exit; }
+  if (t_check_status("486|600") && $avp(vm_on_busy) == 1) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=voicemail_fallback_busy call_id=$ci mailbox=$avp(vm_mailbox)\n");
+    route(SEND_TO_VOICEMAIL);
+    exit;
+  }
+  if (t_check_status("408") && $avp(vm_on_no_answer) == 1) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=voicemail_fallback_no_answer call_id=$ci mailbox=$avp(vm_mailbox)\n");
+    route(SEND_TO_VOICEMAIL);
+    exit;
+  }
+  if (t_check_status("404|480|503") && $avp(vm_on_unavailable) == 1) {
+    xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=voicemail_fallback_unavailable call_id=$ci mailbox=$avp(vm_mailbox)\n");
+    route(SEND_TO_VOICEMAIL);
+    exit;
   }
 }
 
@@ -226,6 +423,10 @@ onreply_route[MANAGE_REPLY] {
 {% endif %}
   if (has_body("application/sdp")) {
     xlog("L_INFO", "kubevoip_sip_event namespace={{ namespace }} gateway={{ gateway_name }} stage=rtpengine_answer call_id=$ci status=$rs\n");
-    rtpengine_answer("replace-origin replace-session-connection");
+    if ($dlg_var(media_target) == "asterisk") {
+      rtpengine_answer("replace-origin replace-session-connection direction=internal direction=external");
+    } else {
+      rtpengine_answer("replace-origin replace-session-connection direction=external direction=external");
+    }
   }
 }

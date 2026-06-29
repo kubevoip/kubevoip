@@ -11,7 +11,7 @@ from typing import Any
 from alembic import command
 from alembic.config import Config
 from psycopg.conninfo import make_conninfo
-from sqlalchemy import Integer, String, create_engine, delete, inspect, select, text
+from sqlalchemy import Integer, LargeBinary, String, Text, create_engine, delete, inspect, select, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import URL
@@ -57,6 +57,67 @@ class Location(Base):
     username: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     domain: Mapped[str | None] = mapped_column(String(64))
     contact: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+
+
+class Presentity(Base):
+    __tablename__ = "presentity"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=False)
+    domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    event: Mapped[str] = mapped_column(String(64), nullable=False)
+    etag: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires: Mapped[int] = mapped_column(Integer, nullable=False)
+    received_time: Mapped[int] = mapped_column(Integer, nullable=False)
+    body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sender: Mapped[str] = mapped_column(String(255), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    ruid: Mapped[str | None] = mapped_column(String(64))
+
+
+class ActiveWatcher(Base):
+    __tablename__ = "active_watchers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    presentity_uri: Mapped[str] = mapped_column(String(255), nullable=False)
+    watcher_username: Mapped[str] = mapped_column(String(64), nullable=False)
+    watcher_domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    to_user: Mapped[str] = mapped_column(String(64), nullable=False)
+    to_domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    event: Mapped[str] = mapped_column(String(64), default="presence", nullable=False)
+    event_id: Mapped[str | None] = mapped_column(String(64))
+    to_tag: Mapped[str] = mapped_column(String(128), nullable=False)
+    from_tag: Mapped[str] = mapped_column(String(128), nullable=False)
+    callid: Mapped[str] = mapped_column(String(255), nullable=False)
+    local_cseq: Mapped[int] = mapped_column(Integer, nullable=False)
+    remote_cseq: Mapped[int] = mapped_column(Integer, nullable=False)
+    contact: Mapped[str] = mapped_column(String(255), nullable=False)
+    record_route: Mapped[str | None] = mapped_column(Text)
+    expires: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(64))
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    socket_info: Mapped[str] = mapped_column(String(64), nullable=False)
+    local_contact: Mapped[str] = mapped_column(String(255), nullable=False)
+    from_user: Mapped[str] = mapped_column(String(64), nullable=False)
+    from_domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_winfo: Mapped[int] = mapped_column(Integer, nullable=False)
+    flags: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    user_agent: Mapped[str | None] = mapped_column(String(255), default="")
+
+
+class Watcher(Base):
+    __tablename__ = "watchers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    presentity_uri: Mapped[str] = mapped_column(String(255), nullable=False)
+    watcher_username: Mapped[str] = mapped_column(String(64), nullable=False)
+    watcher_domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    event: Mapped[str] = mapped_column(String(64), default="presence", nullable=False)
+    status: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(64))
+    inserted_time: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class CallScope(Base):
@@ -135,6 +196,62 @@ class CallRoute(Base):
     target_ref: Mapped[str] = mapped_column(String(63), nullable=False)
     target_extension: Mapped[str | None] = mapped_column(String(20))
     target_host: Mapped[str | None] = mapped_column(String(253))
+    owner_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class AsteriskVoicemailUser(Base):
+    __tablename__ = "voicemail"
+
+    uniqueid: Mapped[int] = mapped_column(Integer, primary_key=True)
+    context: Mapped[str] = mapped_column(String(80), nullable=False)
+    mailbox: Mapped[str] = mapped_column(String(80), nullable=False)
+    password: Mapped[str] = mapped_column(String(80), nullable=False)
+    fullname: Mapped[str | None] = mapped_column(String(80))
+    email: Mapped[str | None] = mapped_column(String(80))
+    pager: Mapped[str | None] = mapped_column(String(80))
+    options: Mapped[str | None] = mapped_column(String(160))
+
+
+class AsteriskVoicemailMessage(Base):
+    __tablename__ = "voicemessages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    msgnum: Mapped[int] = mapped_column(Integer, nullable=False)
+    dir: Mapped[str] = mapped_column(String(255), nullable=False)
+    context: Mapped[str] = mapped_column(String(80), nullable=False)
+    macrocontext: Mapped[str | None] = mapped_column(String(80))
+    callerid: Mapped[str | None] = mapped_column(String(255))
+    origtime: Mapped[str | None] = mapped_column(String(40))
+    duration: Mapped[str | None] = mapped_column(String(20))
+    recording: Mapped[bytes | None] = mapped_column(LargeBinary)
+    flag: Mapped[str | None] = mapped_column(String(30))
+    msg_id: Mapped[str | None] = mapped_column(String(40))
+    mailboxuser: Mapped[str | None] = mapped_column(String(80))
+    mailboxcontext: Mapped[str | None] = mapped_column(String(80))
+
+
+class VoicemailMailbox(Base):
+    __tablename__ = "kubevoip_voicemail_mailbox"
+
+    namespace: Mapped[str] = mapped_column(String(63), primary_key=True)
+    name: Mapped[str] = mapped_column(String(63), primary_key=True)
+    gateway_name: Mapped[str] = mapped_column(String(63), nullable=False)
+    sip_user_name: Mapped[str] = mapped_column(String(63), nullable=False)
+    sip_auth_username: Mapped[str] = mapped_column(String(64), nullable=False)
+    sip_extension: Mapped[str] = mapped_column(String(20), nullable=False)
+    asterisk_pool_name: Mapped[str] = mapped_column(String(63), nullable=False)
+    target_host: Mapped[str] = mapped_column(String(253), nullable=False)
+    target_extension: Mapped[str] = mapped_column(String(20), nullable=False)
+    mailbox: Mapped[str] = mapped_column(String(20), nullable=False)
+    fallback_enabled: Mapped[int] = mapped_column(Integer, nullable=False)
+    fallback_timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    fallback_on_busy: Mapped[int] = mapped_column(Integer, nullable=False)
+    fallback_on_unavailable: Mapped[int] = mapped_column(Integer, nullable=False)
+    fallback_on_no_answer: Mapped[int] = mapped_column(Integer, nullable=False)
+    email_enabled: Mapped[int] = mapped_column(Integer, nullable=False)
+    email_to: Mapped[str | None] = mapped_column(String(253))
+    email_from: Mapped[str | None] = mapped_column(String(253))
+    email_provider: Mapped[str | None] = mapped_column(String(32))
     owner_uid: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
@@ -257,10 +374,7 @@ def reconcile_dial_policy(database: dict[str, str], namespace: str, name: str, u
             ["gateway_name", "owner_uid"],
         )
         session.execute(delete(DialPolicyScope).where(DialPolicyScope.namespace == namespace, DialPolicyScope.policy_name == name))
-        session.add_all(
-            DialPolicyScope(namespace=namespace, policy_name=name, scope_name=scope, position=position)
-            for position, scope in enumerate(scopes)
-        )
+        session.add_all(DialPolicyScope(namespace=namespace, policy_name=name, scope_name=scope, position=position) for position, scope in enumerate(scopes))
 
 
 def delete_dial_policy(database: dict[str, str], namespace: str, name: str) -> None:
@@ -438,6 +552,132 @@ def delete_call_route(database: dict[str, str], namespace: str, name: str) -> No
     Session = _session(database)
     with Session.begin() as session:
         session.execute(delete(CallRoute).where(CallRoute.namespace == namespace, CallRoute.name == name))
+
+
+def reconcile_voicemail_mailbox(
+    database: dict[str, str],
+    namespace: str,
+    name: str,
+    uid: str,
+    gateway_name: str,
+    sip_user_name: str,
+    sip_auth_username: str,
+    sip_extension: str,
+    asterisk_pool_name: str,
+    target_host: str,
+    target_extension: str,
+    mailbox: str,
+    caller_id: str | None,
+    fallback_enabled: bool,
+    fallback_timeout_seconds: int,
+    fallback_on_busy: bool,
+    fallback_on_unavailable: bool,
+    fallback_on_no_answer: bool,
+    email_enabled: bool,
+    email_to: str | None,
+    email_from: str | None,
+    email_provider: str | None,
+) -> None:
+    run_migrations(database)
+    Session = _session(database)
+    with Session.begin() as session:
+        _upsert(
+            session,
+            AsteriskVoicemailUser,
+            {
+                "context": "default",
+                "mailbox": mailbox,
+                "password": mailbox,
+                "fullname": caller_id or sip_auth_username,
+                "email": email_to if email_enabled else None,
+                "pager": None,
+                "options": None,
+            },
+            ["context", "mailbox"],
+            ["fullname", "email", "pager", "options"],
+        )
+        _upsert(
+            session,
+            VoicemailMailbox,
+            {
+                "namespace": namespace,
+                "name": name,
+                "gateway_name": gateway_name,
+                "sip_user_name": sip_user_name,
+                "sip_auth_username": sip_auth_username,
+                "sip_extension": sip_extension,
+                "asterisk_pool_name": asterisk_pool_name,
+                "target_host": target_host,
+                "target_extension": target_extension,
+                "mailbox": mailbox,
+                "fallback_enabled": int(fallback_enabled),
+                "fallback_timeout_seconds": fallback_timeout_seconds,
+                "fallback_on_busy": int(fallback_on_busy),
+                "fallback_on_unavailable": int(fallback_on_unavailable),
+                "fallback_on_no_answer": int(fallback_on_no_answer),
+                "email_enabled": int(email_enabled),
+                "email_to": email_to,
+                "email_from": email_from,
+                "email_provider": email_provider if email_enabled else None,
+                "owner_uid": uid,
+            },
+            ["namespace", "name"],
+            [
+                "gateway_name",
+                "sip_user_name",
+                "sip_auth_username",
+                "sip_extension",
+                "asterisk_pool_name",
+                "target_host",
+                "target_extension",
+                "mailbox",
+                "fallback_enabled",
+                "fallback_timeout_seconds",
+                "fallback_on_busy",
+                "fallback_on_unavailable",
+                "fallback_on_no_answer",
+                "email_enabled",
+                "email_to",
+                "email_from",
+                "email_provider",
+                "owner_uid",
+            ],
+        )
+
+
+def delete_voicemail_mailbox(database: dict[str, str], namespace: str, name: str) -> None:
+    run_migrations(database)
+    Session = _session(database)
+    with Session.begin() as session:
+        row = session.get(VoicemailMailbox, {"namespace": namespace, "name": name})
+        if row:
+            session.execute(
+                delete(AsteriskVoicemailUser).where(
+                    AsteriskVoicemailUser.context == "default",
+                    AsteriskVoicemailUser.mailbox == row.mailbox,
+                )
+            )
+        session.execute(delete(VoicemailMailbox).where(VoicemailMailbox.namespace == namespace, VoicemailMailbox.name == name))
+
+
+def voicemail_message_counts(database: dict[str, str], mailbox: str, context: str = "default") -> tuple[int, int, int]:
+    run_migrations(database)
+    Session = _session(database)
+    with Session.begin() as session:
+        row = session.execute(
+            text(
+                """
+                select
+                  count(id) filter (where dir like '%/INBOX') as new_messages,
+                  count(id) filter (where dir like '%/Old') as old_messages,
+                  count(id) filter (where dir like '%/Urgent') as urgent_messages
+                from voicemessages
+                where mailboxuser = :mailbox and mailboxcontext = :context
+                """
+            ),
+            {"mailbox": mailbox, "context": context},
+        ).one()
+    return int(row.new_messages), int(row.old_messages), int(row.urgent_messages)
 
 
 def database_ready(database: dict[str, str]) -> bool:

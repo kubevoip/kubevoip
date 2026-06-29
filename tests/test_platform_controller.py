@@ -2,7 +2,14 @@ import pytest
 
 from kubevoip import platform_controller
 from kubevoip.controller import WaitingForLoadBalancerError
-from kubevoip.platform_controller import reconcile_call_route_controller, reconcile_gateway, reconcile_media_relay, reconcile_sip_trunk_controller
+from kubevoip.platform_controller import (
+    reconcile_asterisk_pool,
+    reconcile_call_route_controller,
+    reconcile_gateway,
+    reconcile_media_relay,
+    reconcile_sip_trunk_controller,
+    reconcile_voicemail_mailbox_controller,
+)
 
 PROFILE = {
     "apiVersion": "kubevoip.com/v1alpha1",
@@ -44,6 +51,9 @@ class FakeKubernetes:
         return self.ingresses.get(name)
 
     def ready_deployment_replicas(self, namespace, name):
+        return 1
+
+    def ready_replicas(self, namespace, name):
         return 1
 
 
@@ -212,3 +222,84 @@ def test_sip_trunk_and_call_route_statuses_validate_references(monkeypatch):
     assert route_status["phase"] == "Ready"
     assert calls["trunk"][11] == platform_controller.trunk_digest_ha1("user", "provider.example.net", "password")
     assert calls["route"][4:8] == ("home", "internal", 1000, "100")
+
+
+def test_asterisk_pool_renders_voicemail_database_config(monkeypatch):
+    monkeypatch.setattr(platform_controller, "database_ready", lambda _database: None)
+    api = FakeKubernetes(secrets={("test", "db"): {"host": "postgres", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"}})
+
+    status = reconcile_asterisk_pool(
+        {"apiVersion": "kubevoip.com/v1alpha1", "kind": "AsteriskPool", "metadata": {"name": "apps", "namespace": "test", "uid": "uid"}},
+        {"databaseSecretRef": {"name": "db"}, "applications": {"voicemail": {"enabled": True}}},
+        api,
+    )
+
+    secret = next(resource for resource in api.applied if resource["kind"] == "Secret")
+    assert status["databaseSecretRef"] == "db"
+    assert "res_odbc.conf" in secret["data"]
+    assert "voicemail.conf" in secret["data"]
+
+
+def test_voicemail_mailbox_reconciles_to_gateway_database(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(platform_controller, "reconcile_voicemail_mailbox", lambda *args: calls.setdefault("mailbox", args))
+    custom = {
+        (
+            "test",
+            "sipgateways",
+            "home",
+        ): {"spec": {"databaseSecretRef": {"name": "db"}, "networkProfileRef": {"name": "public"}, "mediaRelayRef": {"name": "home"}}},
+        (
+            "test",
+            "sipusers",
+            "daniel",
+        ): {
+            "spec": {
+                "gatewayRef": {"name": "home"},
+                "dialPolicyRef": {"name": "internal"},
+                "extension": "100",
+                "authUsername": "daniel",
+                "callerId": "Daniel <100>",
+                "passwordSecretRef": {"name": "daniel-sip", "key": "password"},
+            }
+        },
+        (
+            "test",
+            "asteriskpools",
+            "applications",
+        ): {"spec": {"databaseSecretRef": {"name": "db"}, "applications": {"voicemail": {"enabled": True, "depositExtension": "701"}}}},
+    }
+    secrets = {
+        ("test", "db"): {"host": "postgres", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"},
+        ("test", "sendgrid", "api-key"): "SG.secret",
+    }
+    api = FakeKubernetes(custom=custom, secrets=secrets)
+
+    status = reconcile_voicemail_mailbox_controller(
+        {"metadata": {"name": "daniel", "namespace": "test", "generation": 1, "uid": "uid"}},
+        {
+            "sipUserRef": {"name": "daniel"},
+            "asteriskPoolRef": {"name": "applications"},
+            "email": {
+                "enabled": True,
+                "to": "daniel@example.com",
+                "from": "voicemail@example.com",
+                "apiKeySecretRef": {"name": "sendgrid", "key": "api-key"},
+            },
+            "fallback": {"enabled": True, "timeoutSeconds": 15},
+        },
+        api,
+    )
+
+    assert status["phase"] == "Ready"
+    assert status["mailbox"] == "100"
+    assert calls["mailbox"][4:12] == (
+        "home",
+        "daniel",
+        "daniel",
+        "100",
+        "applications",
+        "applications-asterisk-pool.test.svc.cluster.local",
+        "701",
+        "100",
+    )

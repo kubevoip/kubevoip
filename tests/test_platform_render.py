@@ -1,5 +1,5 @@
-from kubevoip.models import SIPGatewaySpec
-from kubevoip.platform_render import render_kamailio_config
+from kubevoip.models import AsteriskPoolSpec, SIPGatewaySpec
+from kubevoip.platform_render import render_kamailio_config, render_worker_configs
 
 
 def gateway_spec() -> SIPGatewaySpec:
@@ -65,6 +65,7 @@ def test_kamailio_uses_database_backed_runtime_routing():
     assert "kubevoip_call_route" in rendered
     assert "kubevoip_sip_user" in rendered
     assert "kubevoip_sip_trunk" in rendered
+    assert "kubevoip_voicemail_mailbox" in rendered
     assert "proxy_authorize" in rendered
     assert "lookup(\"location\")" in rendered
     assert 'uac_auth_mode("1")' in rendered
@@ -88,6 +89,83 @@ def test_kamailio_uses_database_backed_runtime_routing():
     assert "kubevoip_sip_headers" not in rendered
     assert "kubevoip_sdp_body" not in rendered
     assert "kubevoip_sip_message" not in rendered
+
+
+def test_kamailio_renders_voicemail_fallback_routes():
+    rendered = render_kamailio_config(gateway_spec(), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
+
+    assert "route[RELAY_USER]" in rendered
+    assert "failure_route[VOICEMAIL_FALLBACK]" in rendered
+    assert "route[SEND_TO_VOICEMAIL]" in rendered
+    assert "X-KubeVoIP-Mailbox" in rendered
+    assert "$avp(vm_mailbox) = $dbr(route=>[0,10]);" in rendered
+    assert "$var(vm_fr) = $avp(vm_timeout) * 1000;" in rendered
+    assert "t_set_fr($var(vm_fr), $var(vm_fr));" in rendered
+    assert 'rtpengine_offer("replace-origin replace-session-connection direction=external direction=external");' in rendered
+    assert 'rtpengine_offer("replace-origin replace-session-connection direction=external direction=internal");' in rendered
+    assert 'rtpengine_answer("replace-origin replace-session-connection direction=internal direction=external");' in rendered
+    assert 'rtpengine_answer("replace-origin replace-session-connection direction=external direction=external");' in rendered
+    assert "media_target=asterisk" in rendered
+
+
+def test_kamailio_renders_mwi_routes():
+    rendered = render_kamailio_config(gateway_spec(), "home", "test", "198.51.100.10", "10.0.0.10", ["udp:rtpengine:2223"])
+
+    assert 'loadmodule "presence.so"' in rendered
+    assert 'loadmodule "presence_mwi.so"' in rendered
+    assert 'modparam("presence", "db_url", "__DBURL__")' in rendered
+    assert 'modparam("presence_mwi", "default_expires", 3600)' in rendered
+    assert 'is_method("SUBSCRIBE") && $hdr(Event) =~ "message-summary"' in rendered
+    assert 'is_method("PUBLISH") && $hdr(Event) =~ "message-summary"' in rendered
+    assert "route[HANDLE_MWI_SUBSCRIBE]" in rendered
+    assert "route[HANDLE_MWI_PUBLISH]" in rendered
+    assert "handle_subscribe();" in rendered
+    assert "handle_publish();" in rendered
+    assert "route(SEND_MWI_NOTIFY_TO_CONTACTS);" in rendered
+    assert "uac_req_send()" in rendered
+    assert "Messages-Waiting" in rendered
+    assert "Voice-Message" in rendered
+
+
+def test_worker_configs_include_odbc_voicemail_when_enabled():
+    spec = AsteriskPoolSpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "applications": {"voicemail": {"enabled": True}},
+        }
+    )
+    configs = render_worker_configs(
+        spec,
+        {"host": "postgres.test.svc", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"},
+    )
+
+    assert "VoiceMailMain()" in configs["extensions.conf"]
+    assert "VoiceMail(${KUBEVOIP_MAILBOX}@default,u)" in configs["extensions.conf"]
+    assert "allow=ulaw" in configs["pjsip.conf"]
+    assert "allow=alaw" in configs["pjsip.conf"]
+    assert "voicemail => odbc,kubevoip,voicemail" in configs["extconfig.conf"]
+    assert "odbcstorage=kubevoip" in configs["voicemail.conf"]
+    assert "forcename=yes" in configs["voicemail.conf"]
+    assert "forcegreetings=yes" in configs["voicemail.conf"]
+    assert "externnotify=/usr/local/bin/kubevoip-mwi-publish" in configs["voicemail.conf"]
+    assert "Driver=PostgreSQL Unicode" in configs["odbc.ini"]
+    assert "password => secret" in configs["res_odbc.conf"]
+
+
+def test_worker_configs_can_preselect_voicemail_main_mailbox():
+    spec = AsteriskPoolSpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "applications": {"voicemail": {"enabled": True, "mainMailbox": "100"}},
+        }
+    )
+    configs = render_worker_configs(
+        spec,
+        {"host": "postgres.test.svc", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"},
+    )
+
+    assert "VoiceMailMain(100@default)" in configs["extensions.conf"]
+    assert "VoiceMailMain()" not in configs["extensions.conf"]
 
 
 def test_kamailio_loads_policy_before_consuming_credentials():

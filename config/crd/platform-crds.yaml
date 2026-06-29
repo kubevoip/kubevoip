@@ -554,9 +554,15 @@ spec:
                 minimum: 1
                 maximum: 32
                 default: 1
-              image:
+              image: &id001
                 type: string
                 minLength: 1
+              databaseSecretRef:
+                type: object
+                properties:
+                  name: *id001
+                required:
+                - name
               applications:
                 type: object
                 properties:
@@ -564,6 +570,138 @@ spec:
                     type: string
                     pattern: ^[0-9]+$
                     default: '600'
+                  voicemail:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: false
+                      mainExtension:
+                        type: string
+                        pattern: ^[0-9]+$
+                        default: '700'
+                      mainMailbox:
+                        type: string
+                        pattern: ^[0-9]+$
+                      depositExtension:
+                        type: string
+                        pattern: ^[0-9]+$
+                        default: '701'
+                    x-kubernetes-validations:
+                    - rule: self.mainExtension != self.depositExtension
+                      message: voicemail mainExtension and depositExtension must be
+                        different
+            x-kubernetes-validations:
+            - rule: '!has(self.applications) || !has(self.applications.voicemail)
+                || !self.applications.voicemail.enabled || has(self.databaseSecretRef)'
+              message: voicemail requires databaseSecretRef
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        required:
+        - spec
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: voicemailmailboxes.kubevoip.com
+spec:
+  group: kubevoip.com
+  scope: Namespaced
+  names:
+    plural: voicemailmailboxes
+    singular: voicemailmailbox
+    kind: VoicemailMailbox
+    shortNames:
+    - vmbox
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              sipUserRef: &id001
+                type: object
+                properties:
+                  name: &id002
+                    type: string
+                    minLength: 1
+                required:
+                - name
+              asteriskPoolRef: *id001
+              mailbox:
+                type: string
+                pattern: ^[0-9]+$
+                maxLength: 20
+              email:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    default: false
+                  to:
+                    type: string
+                    minLength: 3
+                    maxLength: 253
+                  from:
+                    type: string
+                    minLength: 3
+                    maxLength: 253
+                  provider:
+                    type: string
+                    enum:
+                    - SendGrid
+                    default: SendGrid
+                  apiKeySecretRef:
+                    type: object
+                    properties:
+                      name: *id002
+                      key: *id002
+                    required:
+                    - name
+                    - key
+                x-kubernetes-validations:
+                - rule: '!has(self.enabled) || !self.enabled || (has(self.to) && has(self.from)
+                    && has(self.apiKeySecretRef))'
+                  message: enabled voicemail email requires to, from, and apiKeySecretRef
+              fallback:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    default: false
+                  timeoutSeconds:
+                    type: integer
+                    minimum: 1
+                    maximum: 120
+                    default: 20
+                  onBusy:
+                    type: boolean
+                    default: true
+                  onUnavailable:
+                    type: boolean
+                    default: true
+                  onNoAnswer:
+                    type: boolean
+                    default: true
+                x-kubernetes-validations:
+                - rule: '!has(self.enabled) || !self.enabled || self.onBusy || self.onUnavailable
+                    || self.onNoAnswer'
+                  message: enabled voicemail fallback requires at least one condition
+            required:
+            - sipUserRef
+            - asteriskPoolRef
           status:
             type: object
             x-kubernetes-preserve-unknown-fields: true

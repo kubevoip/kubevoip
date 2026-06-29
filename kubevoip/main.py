@@ -12,6 +12,7 @@ from kubevoip.platform_controller import (
     delete_dial_policy_controller,
     delete_sip_trunk_controller,
     delete_sip_user_controller,
+    delete_voicemail_mailbox_controller,
     reconcile_asterisk_pool,
     reconcile_call_route_controller,
     reconcile_call_scope_controller,
@@ -21,6 +22,7 @@ from kubevoip.platform_controller import (
     reconcile_network_profile,
     reconcile_sip_trunk_controller,
     reconcile_sip_user_controller,
+    reconcile_voicemail_mailbox_controller,
 )
 from kubevoip.status import error_status, platform_status
 
@@ -75,6 +77,7 @@ _handlers("dialpolicies", reconcile_dial_policy_controller)
 _handlers("siptrunks", reconcile_sip_trunk_controller)
 _handlers("callroutes", reconcile_call_route_controller)
 _handlers("sipusers", reconcile_sip_user_controller)
+_handlers("voicemailmailboxes", reconcile_voicemail_mailbox_controller)
 
 
 @kopf.on.delete(GROUP, VERSION, "callscopes")
@@ -100,3 +103,8 @@ def delete_call_route(body, spec, **_):
 @kopf.on.delete(GROUP, VERSION, "sipusers")
 def delete_sip_user(body, spec, **_):
     delete_sip_user_controller(body, spec, Kubernetes())
+
+
+@kopf.on.delete(GROUP, VERSION, "voicemailmailboxes")
+def delete_voicemail_mailbox(body, spec, **_):
+    delete_voicemail_mailbox_controller(body, spec, Kubernetes())

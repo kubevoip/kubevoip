@@ -50,6 +50,8 @@ def test_media_relay_builds_stable_service_per_replica():
     assert "--log-stderr" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
     assert "--log-level=6" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
     assert "--split-logs" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    assert '--interface="internal/$POD_IP"' in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
+    assert '--interface="external/$POD_IP!$advertised"' in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
     assert "kubevoip_rtp_event" in deployments[0]["spec"]["template"]["spec"]["containers"][0]["args"][0]
 
 
@@ -149,3 +151,32 @@ def test_asterisk_pool_uses_private_service_and_headless_identity():
         for mount in statefulset["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
     }
     assert "logger.conf" in mounted
+
+
+def test_asterisk_pool_mounts_voicemail_odbc_config():
+    owner = {**OWNER, "kind": "AsteriskPool"}
+    spec = AsteriskPoolSpec.model_validate(
+        {
+            "databaseSecretRef": {"name": "db"},
+            "applications": {"voicemail": {"enabled": True}},
+        }
+    )
+    resources = build_asterisk_pool_resources(
+        "apps",
+        "test",
+        owner,
+        spec,
+        {"host": "postgres.test.svc", "port": "5432", "dbname": "kubevoip", "user": "app", "password": "secret"},
+    )
+    secret = next(item for item in resources if item["kind"] == "Secret")
+    statefulset = next(item for item in resources if item["kind"] == "StatefulSet")
+    container = statefulset["spec"]["template"]["spec"]["containers"][0]
+    mounts = container["volumeMounts"]
+
+    assert "res_odbc.conf" in secret["data"]
+    assert "voicemail.conf" in secret["data"]
+    assert any(mount["subPath"] == "odbc.ini" and mount["mountPath"] == "/etc/odbc.ini" for mount in mounts)
+    assert any(mount["subPath"] == "voicemail.conf" and mount["mountPath"] == "/etc/asterisk/voicemail.conf" for mount in mounts)
+    assert container["envFrom"] == [{"secretRef": {"name": "db"}}]
+    assert {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}} in container["env"]
+    assert {"name": "POD_IP", "valueFrom": {"fieldRef": {"fieldPath": "status.podIP"}}} in container["env"]

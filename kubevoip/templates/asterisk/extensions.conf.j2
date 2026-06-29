@@ -2,3 +2,21 @@
 exten => {{ echo_extension }},1,Answer()
  same => n,Echo()
  same => n,Hangup()
+{% if voicemail.enabled %}
+
+exten => {{ voicemail.main_extension }},1,Answer()
+{% if voicemail.main_mailbox %}
+ same => n,VoiceMailMain({{ voicemail.main_mailbox }}@default)
+{% else %}
+ same => n,VoiceMailMain()
+{% endif %}
+ same => n,Hangup()
+
+exten => {{ voicemail.deposit_extension }},1,NoOp(KubeVoIP voicemail deposit)
+ same => n,Set(KUBEVOIP_MAILBOX=${PJSIP_HEADER(read,X-KubeVoIP-Mailbox)})
+ same => n,GotoIf($["${KUBEVOIP_MAILBOX}" = ""]?missing)
+ same => n,VoiceMail(${KUBEVOIP_MAILBOX}@default,u)
+ same => n,Hangup()
+ same => n(missing),Playback(vm-goodbye)
+ same => n,Hangup()
+{% endif %}

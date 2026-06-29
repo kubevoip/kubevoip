@@ -82,6 +82,50 @@ sip_headers = obj({"enabled": {"type": "boolean", "default": False}})
 sdp = obj({"enabled": {"type": "boolean", "default": False}})
 observability = obj({"capture": capture, "sipHeaders": sip_headers, "sdp": sdp})
 status = {"type": "object", "x-kubernetes-preserve-unknown-fields": True}
+voicemail_application = obj(
+    {
+        "enabled": {"type": "boolean", "default": False},
+        "mainExtension": string(pattern=r"^[0-9]+$", default="700"),
+        "mainMailbox": string(pattern=r"^[0-9]+$"),
+        "depositExtension": string(pattern=r"^[0-9]+$", default="701"),
+    }
+) | {
+    "x-kubernetes-validations": [
+        {"rule": "self.mainExtension != self.depositExtension", "message": "voicemail mainExtension and depositExtension must be different"}
+    ]
+}
+voicemail_fallback = obj(
+    {
+        "enabled": {"type": "boolean", "default": False},
+        "timeoutSeconds": integer(minimum=1, maximum=120, default=20),
+        "onBusy": {"type": "boolean", "default": True},
+        "onUnavailable": {"type": "boolean", "default": True},
+        "onNoAnswer": {"type": "boolean", "default": True},
+    }
+) | {
+    "x-kubernetes-validations": [
+        {
+            "rule": "!has(self.enabled) || !self.enabled || self.onBusy || self.onUnavailable || self.onNoAnswer",
+            "message": "enabled voicemail fallback requires at least one condition",
+        }
+    ]
+}
+voicemail_email = obj(
+    {
+        "enabled": {"type": "boolean", "default": False},
+        "to": string(minLength=3, maxLength=253),
+        "from": string(minLength=3, maxLength=253),
+        "provider": string(enum=["SendGrid"], default="SendGrid"),
+        "apiKeySecretRef": secret_key_ref,
+    }
+) | {
+    "x-kubernetes-validations": [
+        {
+            "rule": "!has(self.enabled) || !self.enabled || (has(self.to) && has(self.from) && has(self.apiKeySecretRef))",
+            "message": "enabled voicemail email requires to, from, and apiKeySecretRef",
+        }
+    ]
+}
 
 SPECS = {
     "NetworkProfile": obj(
@@ -215,10 +259,32 @@ SPECS = {
         {
             "replicas": integer(minimum=1, maximum=32, default=1),
             "image": name,
+            "databaseSecretRef": local_ref,
             "applications": obj(
-                {"echoExtension": string(pattern=r"^[0-9]+$", default="600")},
+                {
+                    "echoExtension": string(pattern=r"^[0-9]+$", default="600"),
+                    "voicemail": voicemail_application,
+                },
             ),
         }
+    )
+    | {
+        "x-kubernetes-validations": [
+            {
+                "rule": "!has(self.applications) || !has(self.applications.voicemail) || !self.applications.voicemail.enabled || has(self.databaseSecretRef)",
+                "message": "voicemail requires databaseSecretRef",
+            }
+        ]
+    },
+    "VoicemailMailbox": obj(
+        {
+            "sipUserRef": local_ref,
+            "asteriskPoolRef": local_ref,
+            "mailbox": string(pattern=r"^[0-9]+$", maxLength=20),
+            "email": voicemail_email,
+            "fallback": voicemail_fallback,
+        },
+        ("sipUserRef", "asteriskPoolRef"),
     ),
     "SIPGateway": obj(
         {
@@ -245,6 +311,7 @@ PLURALS = {
     "DialPolicy": ("dialpolicies", "dialpolicy", ["dialpolicy"]),
     "MediaRelay": ("mediarelays", "mediarelay", ["relay"]),
     "AsteriskPool": ("asteriskpools", "asteriskpool", ["astpool"]),
+    "VoicemailMailbox": ("voicemailmailboxes", "voicemailmailbox", ["vmbox"]),
     "SIPGateway": ("sipgateways", "sipgateway", ["sipgw"]),
 }
 

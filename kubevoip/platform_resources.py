@@ -132,7 +132,7 @@ test -n "$advertised"
 echo "kubevoip_rtp_event component=rtpengine service={service_name} advertised=$advertised pod_ip=$POD_IP port_min={start} port_max={end}"
 exec rtpengine --foreground --log-stderr --table=-1 \
   --log-level=6 --split-logs \
-  --interface="$POD_IP!$advertised" --listen-ng=0.0.0.0:2223 \
+  --interface="internal/$POD_IP" --interface="external/$POD_IP!$advertised" --listen-ng=0.0.0.0:2223 \
   --port-min={start} --port-max={end}
 """
         deployment = {
@@ -170,12 +170,28 @@ exec rtpengine --foreground --log-stderr --table=-1 \
     return resources
 
 
-def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, Any], spec: AsteriskPoolSpec) -> list[dict[str, Any]]:
+def _asterisk_config_mount(filename: str) -> dict[str, Any]:
+    mount_path = "/etc/odbc.ini" if filename == "odbc.ini" else f"/etc/asterisk/{filename}"
+    return {
+        "name": "config",
+        "mountPath": mount_path,
+        "subPath": filename,
+        "readOnly": True,
+    }
+
+
+def build_asterisk_pool_resources(
+    name: str,
+    namespace: str,
+    owner: dict[str, Any],
+    spec: AsteriskPoolSpec,
+    database: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
     base = f"{name}-asterisk-pool"
     headless_name = f"{base}-headless"
     labels = component_labels("asterisk-worker", name)
     common = {"namespace": namespace, "instance": name, "owner": owner}
-    configs = render_worker_configs(spec)
+    configs = render_worker_configs(spec, database)
     checksum = stable_hash(configs)
     secret = {
         "apiVersion": "v1",
@@ -184,6 +200,11 @@ def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, An
         "data": {key: base64.b64encode(value.encode()).decode() for key, value in configs.items()},
     }
     service_ports = [{"name": "sip", "port": 5060, "protocol": "UDP"}]
+    env_from = [{"secretRef": {"name": spec.database_secret_ref.name}}] if spec.applications.voicemail.enabled and spec.database_secret_ref else []
+    env = [
+        {"name": "POD_NAMESPACE", "valueFrom": {"fieldRef": {"fieldPath": "metadata.namespace"}}},
+        {"name": "POD_IP", "valueFrom": {"fieldRef": {"fieldPath": "status.podIP"}}},
+    ]
     service = {
         "apiVersion": "v1",
         "kind": "Service",
@@ -211,15 +232,9 @@ def build_asterisk_pool_resources(name: str, namespace: str, owner: dict[str, An
                         {
                             "name": "asterisk",
                             "image": spec.image,
-                            "volumeMounts": [
-                                {
-                                    "name": "config",
-                                    "mountPath": f"/etc/asterisk/{filename}",
-                                    "subPath": filename,
-                                    "readOnly": True,
-                                }
-                                for filename in configs
-                            ],
+                            "env": env,
+                            **({"envFrom": env_from} if env_from else {}),
+                            "volumeMounts": [_asterisk_config_mount(filename) for filename in configs],
                             "readinessProbe": {"exec": {"command": ["asterisk", "-rx", "core show uptime"]}, "periodSeconds": 10},
                         }
                     ],
